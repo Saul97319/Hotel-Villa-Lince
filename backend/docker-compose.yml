@@ -1,0 +1,45 @@
+version: "3.1"
+services:
+    db:
+        image: mysql:8.0
+        ports:
+            - "3308:3306"
+        environment:
+            MYSQL_DATABASE: Biblioteca
+            MYSQL_PASSWORD: SuperSecretPassword123
+            MYSQL_ROOT_PASSWORD: SuperSecretPassword123
+        volumes:
+            - ./dump:/docker-entrypoint-initdb.d
+            - ./conf:/etc/mysql/conf.d
+            - persistent:/var/lib/mysql
+            
+        networks:
+            - default
+            
+    www:
+        build: .
+        ports:
+            - "5000:5000"
+        volumes:
+            - ./www:/var/www/html
+        links:
+            - db
+        networks:
+            - default
+            
+    phpmyadmin:
+        image: phpmyadmin/phpmyadmin
+        links:
+            - db:db
+        ports:
+            - 7000:80
+        environment:
+            MYSQL_USER: root
+            MYSQL_PASSWORD: SuperSecretPassword123
+            MYSQL_ROOT_PASSWORD: SuperSecretPassword123
+        deploy:
+            resources:
+              limits:
+                memory: 150M
+volumes:
+    persistent:

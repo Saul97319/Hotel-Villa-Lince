@@ -1,0 +1,141 @@
+body {
+    font-family: Arial, sans-serif;
+    margin: 0;
+    padding: 0;
+    background-color: #f9f9f9;
+}
+
+header nav {
+    background: #333;
+    padding: 10px;
+    text-align: center;
+}
+
+nav a {
+    margin: 0 15px;
+    text-decoration: none;
+    color: white;
+    font-weight: bold;
+}
+
+.cart-icon i {
+    font-size: 22px;
+    color: white;
+}
+
+h1 {
+    text-align: center;
+    margin: 20px 0;
+    color: #333;
+}
+
+.contenedor {
+    display: flex;
+    justify-content: space-between;
+    margin: 20px auto;
+    padding: 20px;
+    gap: 20px;
+    max-width: 1200px;
+}
+
+.productos {
+    flex: 2;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.producto {
+    display: flex;
+    gap: 20px;
+    background: #fff;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+    padding: 15px;
+    border-radius: 8px;
+    align-items: center;
+}
+
+.producto img {
+    width: 120px;
+    height: auto;
+    border-radius: 5px;
+}
+
+.detalles {
+    flex: 1;
+}
+
+.detalles h3 {
+    margin: 0 0 10px;
+    color: #333;
+}
+
+.detalles p {
+    margin: 0 0 10px;
+    color: #666;
+}
+
+.acciones {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.btn-cantidad, .btn-eliminar {
+    background: #007bff;
+    border: none;
+    color: white;
+    font-size: 16px;
+    border-radius: 5px;
+    padding: 5px 10px;
+    cursor: pointer;
+    transition: background-color 0.3s ease;
+}
+
+.btn-cantidad:hover {
+    background: #0056b3;
+}
+
+.btn-eliminar {
+    background: #dc3545;
+    padding: 5px 15px;
+}
+
+.btn-eliminar:hover {
+    background: #a71d2a;
+}
+
+.resumen {
+    flex: 1;
+    background: #fff;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+    border-radius: 8px;
+    padding: 20px;
+}
+
+.resumen h2 {
+    color: #333;
+    margin-bottom: 20px;
+}
+
+.resumen p, .resumen h3 {
+    margin: 0 0 10px;
+    color: #666;
+}
+
+.resumen .btn-pago {
+    width: 100%;
+    background: #28a745;
+    border: none;
+    color: white;
+    font-size: 18px;
+    padding: 10px 20px;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: background-color 0.3s ease;
+    margin-top: 20px;
+}
+
+.resumen .btn-pago:hover {
+    background: #218838;
+}

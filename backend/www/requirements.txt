@@ -1,0 +1,15 @@
+Flask==2.0.1
+SQLAlchemy==1.4.22
+Flask-SQLAlchemy==2.5.1
+Werkzeug==2.0.3
+pymysql==1.0.2
+mysql-connector-python
+PyJWT
+cryptography==3.4.7
+pycryptodome==3.19.0
+qrcode
+Pillow==10.3.0
+Flask-CORS
+
+
+
