@@ -2,7 +2,7 @@
 
 Este es un proyecto Full-Stack que consiste en un portal de autenticación basado en roles. El frontend está construido con React y Vite, mientras que el backend funciona con Python (Flask) y una base de datos MySQL, todo contenido y orquestado mediante Docker.
 
-----------------------------------------------------------------------------------------------------------------------------------
+------------------------------------------------------------------------------------------------------
 
 # Tecnologías Utilizadas #
 
@@ -11,7 +11,7 @@ Este es un proyecto Full-Stack que consiste en un portal de autenticación basad
 * Base de Datos: MySQL 8.0
 * Infraestructura: Docker & Docker Compose.
 
-----------------------------------------------------------------------------------------------------------------------------------
+------------------------------------------------------------------------------------------------------
 
 # Requisitos Previos #
 
@@ -21,7 +21,7 @@ Antes de ejecutar este proyecto, asegúrate de tener instalado en tu computadora
 2. [Docker Desktop](https://www.docker.com/products/docker-desktop/) (Debe estar abierto y ejecutándose en segundo plano)
 3. [Git](https://git-scm.com/)
 
---------------------------------------------------------------------------------------------------------------------------------------
+------------------------------------------------------------------------------------------------------
 
 # Instalación y Ejecución #
 
@@ -30,8 +30,8 @@ Sigue estos pasos en orden para levantar el entorno de desarrollo completo.
 # 1. Clonar el repositorio #
 Abre tu terminal y clona este proyecto en tu máquina local:
 
-git clone https://github.com/TU_USUARIO/TU_REPOSITORIO.git
-cd TU_REPOSITORIO
+git clone https://github.com/Saul97319/Hotel-Villa-Lince
+cd Hotel-Villa-Lince
 
 
 # 2. Levantar el Backend y la Base de Datos (Docker) #
@@ -51,7 +51,7 @@ npm install
 npm run dev
 
 
---------------------------------------------------------------------------------------------------------------------------------------
+------------------------------------------------------------------------------------------------------
 
 # Accesos y Puertos del Sistema #
 
@@ -61,7 +61,7 @@ Una vez que ambos entornos estén corriendo, podrás acceder a los siguientes se
 * Backend (API Flask): `http://localhost:5000`
 * Gestor de Base de Datos (phpMyAdmin): [http://localhost:7000](http://localhost:7000)
 
-----------------------------------------------------------------------------------------------------------------------------------------
+------------------------------------------------------------------------------------------------------
 
 # Credenciales por defecto #
 
@@ -79,7 +79,7 @@ Para probar la aplicación en React, puedes usar las siguientes credenciales. *(
 | **Gerente** | gerente@hotel.com | gerente123 |
 | **Empleado** | empleado@hotel.com | empleado123 |
 
-------------------------------------------------------------------------------------------------------------------------------------------
+------------------------------------------------------------------------------------------------------
 
 # Detener el proyecto #
 Cuando termines de trabajar, puedes apagar los servicios del backend para liberar recursos de tu computadora. En la terminal donde ejecutaste Docker, usa el siguiente comando:
