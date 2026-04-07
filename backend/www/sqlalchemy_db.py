@@ -1,7 +1,193 @@
-from sqlalchemy import Column, Integer, String, Date, Text, ForeignKey, TIMESTAMP, CheckConstraint, func
+from sqlalchemy import Column, Integer, String, Date, Text, ForeignKey, TIMESTAMP, CheckConstraint, func, DateTime, DECIMAL, Boolean
 from sqlalchemy.orm import relationship, declarative_base
 from sqlalchemy.orm import sessionmaker
 
 
 Base = declarative_base()
 
+class Sucursal(Base):
+    __tablename__ = 'sucursal'
+
+    id_sucursal = Column(Integer, primary_key=True, autoincrement=True)
+    nombre = Column(String(100))
+    direccion = Column(String(200))
+    ciudad = Column(String(100))
+    telefono = Column(String(20))
+
+    empleados = relationship("Empleado", back_populates="sucursal")
+    habitaciones = relationship("Habitacion", back_populates="sucursal")
+    reservas = relationship("Reserva", back_populates="sucursal")
+
+class Empleado(Base):
+    __tablename__ = 'empleado'
+
+    id_empleado = Column(Integer, primary_key=True, autoincrement=True)
+    nombre = Column(String(100))
+    apellido = Column(String(100))
+    email = Column(String(150), unique=True)
+    password_hash = Column(String(255))
+    rol = Column(String(50))
+    estado = Column(String(50))
+    sucursal_id = Column(Integer, ForeignKey('sucursal.id_sucursal'))
+    fecha_creacion = Column(DateTime, default=func.now())
+
+    sucursal = relationship("Sucursal", back_populates="empleados")
+    reservas = relationship("Reserva", back_populates="empleado")
+
+class Admin(Base):
+    __tablename__ = 'admin'
+
+    id_admin = Column(Integer, primary_key=True, autoincrement=True)
+    nombre = Column(String(100))
+    email = Column(String(150), unique=True)
+    password_hash = Column(String(255))
+    estado = Column(String(50))
+    fecha_creacion = Column(DateTime, default=func.now())
+
+
+class Cliente(Base):
+    __tablename__ = 'cliente'
+
+    id_cliente = Column(Integer, primary_key=True, autoincrement=True)
+    nombre = Column(String(100))
+    apellido = Column(String(100))
+    telefono = Column(String(20))
+    email = Column(String(150))
+    tipo_cliente = Column(String(50))
+    fecha_registro = Column(DateTime, default=func.now())
+
+    reservas = relationship("Reserva", back_populates="cliente")
+
+class Empresa(Base):
+    __tablename__ = 'empresa'
+
+    id_empresa = Column(Integer, primary_key=True, autoincrement=True)
+    nombre = Column(String(150))
+    rfc = Column(String(20), unique=True)
+    telefono = Column(String(20))
+    email = Column(String(150))
+    estado = Column(String(50))
+
+    convenios = relationship("Convenio", back_populates="empresa")
+    huespedes = relationship("HuespedEmpresarial", back_populates="empresa")
+    facturas = relationship("Factura", back_populates="empresa")
+
+class Convenio(Base):
+    __tablename__ = 'convenio'
+
+    id_convenio = Column(Integer, primary_key=True, autoincrement=True)
+    empresa_id = Column(Integer, ForeignKey('empresa.id_empresa'))
+    terminos = Column(Text)
+    descuento = Column(DECIMAL(5,2))
+    fecha_inicio = Column(Date)
+    fecha_fin = Column(Date)
+    activo = Column(Boolean)
+
+    empresa = relationship("Empresa", back_populates="convenios")
+
+class HuespedEmpresarial(Base):
+    __tablename__ = 'huesped_empresarial'
+
+    id_huesped = Column(Integer, primary_key=True, autoincrement=True)
+    empresa_id = Column(Integer, ForeignKey('empresa.id_empresa'))
+    nombre = Column(String(150))
+    fecha_llegada = Column(Date)
+    fecha_salida = Column(Date)
+    tipo_habitacion = Column(String(50))
+
+    empresa = relationship("Empresa", back_populates="huespedes")
+
+class Habitacion(Base):
+    __tablename__ = 'habitacion'
+
+    id_habitacion = Column(Integer, primary_key=True, autoincrement=True)
+    numero = Column(Integer)
+    tipo = Column(String(50))
+    precio_noche = Column(DECIMAL(10,2))
+    estado = Column(String(50))
+    estado_limpieza = Column(String(50))
+    sucursal_id = Column(Integer, ForeignKey('sucursal.id_sucursal'))
+
+    sucursal = relationship("Sucursal", back_populates="habitaciones")
+    reservas = relationship("Reserva", back_populates="habitacion")
+
+class Reserva(Base):
+    __tablename__ = 'reserva'
+
+    id_reserva = Column(Integer, primary_key=True, autoincrement=True)
+    cliente_id = Column(Integer, ForeignKey('cliente.id_cliente'))
+    habitacion_id = Column(Integer, ForeignKey('habitacion.id_habitacion'))
+    empleado_id = Column(Integer, ForeignKey('empleado.id_empleado'))
+    sucursal_id = Column(Integer, ForeignKey('sucursal.id_sucursal'))
+    fecha_reserva = Column(Date)
+    checkin = Column(Date)
+    checkout = Column(Date)
+    estado = Column(String(50))
+    metodo_reserva = Column(String(50))
+
+    cliente = relationship("Cliente", back_populates="reservas")
+    habitacion = relationship("Habitacion", back_populates="reservas")
+    empleado = relationship("Empleado", back_populates="reservas")
+    sucursal = relationship("Sucursal", back_populates="reservas")
+    pago = relationship("Pago", uselist=False, back_populates="reserva")
+    servicios = relationship("Servicio", back_populates="reserva")
+    factura = relationship("Factura", uselist=False, back_populates="reserva")
+
+class Pago(Base):
+    __tablename__ = 'pago'
+
+    id_pago = Column(Integer, primary_key=True, autoincrement=True)
+    reserva_id = Column(Integer, ForeignKey('reserva.id_reserva'), unique=True)
+    monto = Column(DECIMAL(10,2))
+    metodo_pago = Column(String(50))
+    estado_pago = Column(String(50))
+    fecha_pago = Column(DateTime)
+
+    reserva = relationship("Reserva", back_populates="pago")
+
+class Servicio(Base):
+    __tablename__ = 'servicio'
+
+    id_servicio = Column(Integer, primary_key=True, autoincrement=True)
+    reserva_id = Column(Integer, ForeignKey('reserva.id_reserva'))
+    descripcion = Column(String(200))
+    costo = Column(DECIMAL(10,2))
+    facturado = Column(Boolean)
+
+    reserva = relationship("Reserva", back_populates="servicios")
+
+class Factura(Base):
+    __tablename__ = 'factura'
+
+    id_factura = Column(Integer, primary_key=True, autoincrement=True)
+    reserva_id = Column(Integer, ForeignKey('reserva.id_reserva'), unique=True)
+    empresa_id = Column(Integer, ForeignKey('empresa.id_empresa'))
+    total = Column(DECIMAL(10,2))
+    estado = Column(String(50))
+    tipo_envio = Column(String(50))
+    fecha_emision = Column(DateTime, default=func.now())
+    generado_por_empleado = Column(Integer, ForeignKey('empleado.id_empleado'))
+
+    reserva = relationship("Reserva", back_populates="factura")
+    empresa = relationship("Empresa", back_populates="facturas")
+    detalles = relationship("FacturaDetalle", back_populates="factura")
+
+class FacturaDetalle(Base):
+    __tablename__ = 'factura_detalle'
+
+    id_detalle = Column(Integer, primary_key=True, autoincrement=True)
+    factura_id = Column(Integer, ForeignKey('factura.id_factura'))
+    servicio_id = Column(Integer, ForeignKey('servicio.id_servicio'))
+    subtotal = Column(DECIMAL(10,2))
+
+    factura = relationship("Factura", back_populates="detalles")
+
+class Reporte(Base):
+    __tablename__ = 'reporte'
+
+    id_reporte = Column(Integer, primary_key=True, autoincrement=True)
+    tipo = Column(String(50))
+    fecha_inicio = Column(Date)
+    fecha_fin = Column(Date)
+    estado_filtro = Column(String(50))
+    generado_por_empleado = Column(Integer, ForeignKey('empleado.id_empleado'))
