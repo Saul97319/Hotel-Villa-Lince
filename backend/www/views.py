@@ -466,6 +466,12 @@ def login_empleado():
 
     return render_template("login_empleado.html")
 
+#panel provisional para empleados
+@views.route('/panel_empleado')
+@token_empleado #acceso solo para empleados, decorador cambia de acuerdo al rol
+def panel_empleado(current_user):
+    return render_template('panel_empleado.html', empleado_usuario=current_user)
+
 
 #registro de clientes, login
 @views.route('/cliente_registro', methods=['GET', 'POST'])
@@ -580,3 +586,7 @@ def login_cliente():
     return render_template('login_cliente.html')
 
 
+@views.route('/panel_cliente')
+@token_required #acceso solo para clientes, decorador cambia de acuerdo al rol
+def panel_cliente(current_user):
+    return render_template('panel_cliente.html', cliente_usuario=current_user)
