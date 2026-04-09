@@ -521,7 +521,7 @@ def cliente_registro():
             db.session.add(nuevo_cliente)
             db.session.commit()
             flash('Registro exitoso.', 'success')
-            return redirect(url_for('views.home'))
+            return redirect(url_for('views.login_cliente'))
 
         except Exception as e:
             db.session.rollback()
