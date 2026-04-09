@@ -124,7 +124,7 @@ def token_required(f):
 
         if not token_base64:
             flash('Acceso no autorizado. Inicia sesión.', 'danger')
-            return redirect(url_for('views.home'))
+            return redirect(url_for('views.login_cliente'))
 
         try:
             # Decodificar Base64
@@ -137,15 +137,15 @@ def token_required(f):
 
             if not current_user:
                 flash('Usuario no encontrado. Inicia sesión nuevamente.', 'danger')
-                return redirect(url_for('views.home'))
+                return redirect(url_for('views.login_cliente'))
 
         except jwt.ExpiredSignatureError:
             flash('El token ha expirado.', 'danger')
-            return redirect(url_for('views.home'))
+            return redirect(url_for('views.login_cliente'))
 
         except jwt.InvalidTokenError:
             flash('Token inválido.', 'danger')
-            return redirect(url_for('views.home'))
+            return redirect(url_for('views.login_cliente'))
 
         except Exception as e:
             print(f"Error: {str(e)}")
