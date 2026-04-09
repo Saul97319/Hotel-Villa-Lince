@@ -578,3 +578,5 @@ def login_cliente():
         return response
 
     return render_template('login_cliente.html')
+
+
