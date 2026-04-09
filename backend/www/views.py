@@ -1,6 +1,6 @@
 from flask import Blueprint, render_template, request, jsonify
 from base import Admin, Cliente, Empleado
-from sqlalchemy_db import db
+from base import db
 from werkzeug.security import check_password_hash
 import jwt, base64, hashlib, datetime, re, decimal
 import datetime, re
