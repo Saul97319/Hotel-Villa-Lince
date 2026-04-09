@@ -3,7 +3,7 @@ from base import Admin, Cliente, Empleado
 from sqlalchemy_db import db
 from werkzeug.security import check_password_hash
 import jwt, base64, hashlib, datetime, re, decimal
-import datetime
+import datetime, re
 from functools import wraps
 from flask import request, redirect, url_for, flash
 from datetime import datetime, timedelta
@@ -34,6 +34,38 @@ SALT = "twH3art_bR4K3-+Av3n^eced" #Para cifrado
 def hash_contrasena(password):
     return hashlib.sha256((password + SALT).encode('utf-8')).hexdigest()
 
+#validacion de email
+def validar_email(email):
+    if not email:
+        return False
+    
+    regex = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+    return re.match(regex, email)
+
+#validacion de contraseña
+def validar_contrasena(password):
+    if len(password) < 8:
+        return "Debe tener al menos 8 caracteres"
+
+    if not re.search(r'[A-Z]', password):
+        return "Debe tener una mayúscula"
+
+    if not re.search(r'[a-z]', password):
+        return "Debe tener una minúscula"
+
+    if not re.search(r'[0-9]', password):
+        return "Debe tener un número"
+
+    if not re.search(r'[!@#$%^&*(),.?\":{}|<>]', password):
+        return "Debe tener un carácter especial"
+
+    return None  # válida
+
+#whitelist de caracteres para nombres
+def validar_usuario(usuario):
+    # solo letras, números y guion bajo
+    return re.match(r'^[a-zA-Z0-9_]{4,20}$', usuario)
+
 
 #Autenticación con JWT
 #   Token de admin
@@ -53,7 +85,6 @@ def token_admin(f):
             # Decodificar JWT
             data = jwt.decode(token, SECRET_KEY, algorithms=['HS256'])
 
-            # 🔥 CAMBIO: buscar por email (o id_admin)
             current_user = Admin.query.filter_by(email=data['email']).first()
 
             # Validación de existencia
@@ -127,11 +158,6 @@ def token_required(f):
 
 
 #Autenticación con JWT usuarios(empleados)
-from functools import wraps
-from flask import request, redirect, url_for, flash
-import jwt
-import base64
-
 def token_empleado(f):
     @wraps(f)
     def decorated(*args, **kwargs):
@@ -194,12 +220,28 @@ def admin_registro():
         confirmar_contrasena = request.form.get('confirmar_contrasena')
         clave_ingresada = request.form.get('clave_admin')
 
+        # Validar nombre whitelist
+        if not validar_usuario(nombre):
+            flash('El nombre solo puede contener letras, números y guion bajo (4-20 caracteres).', 'danger')
+            return redirect(url_for('views.admin_registro'))
+
+        # Validar email
+        if not validar_email(email):
+            flash('Correo electrónico inválido.', 'danger')
+            return redirect(url_for('views.admin_registro'))
+
+        # Validar contraseña (seguridad)
+        error_password = validar_contrasena(contrasena)
+        if error_password:
+            flash(error_password, 'danger')
+            return redirect(url_for('views.admin_registro'))
+
         # Verificar clave administrativa
         if not verificar_clave_admin(clave_ingresada):
             flash('Clave administrativa incorrecta.', 'danger')
             return redirect(url_for('views.admin_registro'))
 
-        # Validar contraseñas
+        # Validar contraseñas iguales
         if contrasena != confirmar_contrasena:
             flash('Las contraseñas no coinciden.', 'danger')
             return redirect(url_for('views.admin_registro'))
@@ -209,7 +251,7 @@ def admin_registro():
             flash('El correo ya está registrado.', 'danger')
             return redirect(url_for('views.admin_registro'))
 
-        #Hashear contraseña
+        # Hashear contraseña (SIN CAMBIOS como pediste)
         hashed_password = hashlib.sha256(contrasena.encode()).hexdigest()
 
         # Crear nuevo admin 
@@ -217,7 +259,7 @@ def admin_registro():
             nombre=nombre,
             email=email,
             password_hash=hashed_password,
-            estado='activo'  # importante para el token
+            estado='activo'
         )
 
         try:
@@ -241,6 +283,21 @@ def admin():
         email = request.form.get('email')
         contrasena = request.form.get('contrasena')
 
+        # Validar campos vacíos
+        if not email or not contrasena:
+            flash('Todos los campos son obligatorios.', 'danger')
+            return redirect(url_for('views.admin'))
+
+        # Validar formato de email
+        if not validar_email(email):
+            flash('Correo electrónico inválido.', 'danger')
+            return redirect(url_for('views.admin'))
+
+        # Validar longitud básica (anti abuso)
+        if len(contrasena) > 100:
+            flash('Entrada inválida.', 'danger')
+            return redirect(url_for('views.admin'))
+
         # Buscar administrador por email
         admin = Admin.query.filter_by(email=email).first()
 
@@ -248,33 +305,33 @@ def admin():
             flash('Usuario no encontrado.', 'danger')
             return redirect(url_for('views.admin'))
 
-        # Verificar contraseña (SHA256 - como ya manejas)
+        # Verificar contraseña (SIN CAMBIOS)
         hashed_password = hashlib.sha256(contrasena.encode()).hexdigest()
 
         if admin.password_hash != hashed_password:
             flash('Contraseña incorrecta.', 'danger')
             return redirect(url_for('views.admin'))
 
-        # Validar estado (IMPORTANTE para token_admin)
+        # Validar estado
         if admin.estado != 'activo':
             flash('Usuario inactivo.', 'danger')
             return redirect(url_for('views.admin'))
 
-        # Generar token JWT (adaptado a tu middleware)
+        # Generar token JWT
         token = jwt.encode(
             {
-                'email': admin.email,  #debe coincidir con token_admin
+                'email': admin.email,
                 'exp': datetime.utcnow() + timedelta(hours=2)
             },
             SECRET_KEY,
             algorithm='HS256'
         )
 
-        #Codificar en Base64
+        # Codificar en Base64
         token_base64 = base64.b64encode(token.encode()).decode()
 
         # Guardar cookie
-        response = make_response(redirect(url_for('views.resultados')))#temporalmente a resultados, cambiar en cuanto se tenga la vista a la que realmente se quiera redirigir
+        response = make_response(redirect(url_for('views.resultados')))
         response.set_cookie('admin_token', token_base64, httponly=True)
 
         flash(f'Bienvenido, {admin.nombre}', 'success')
@@ -282,8 +339,242 @@ def admin():
 
     return render_template("admin.html")
 
+
+
+
 #provisional, cambiar a la vista que se quiera mostrar después del login de admin
 @views.route('/resultados')
 @token_admin #acceso solo para admins, decorador cambia de acuerdo al rol
 def resultados(current_user):
     return render_template('resultados.html', admin_usuario=current_user)
+
+
+#registro de empleados
+@views.route('/empleado_registro', methods=['GET', 'POST'])
+def empleado_registro():
+    if request.method == 'POST':
+        nombre = request.form.get('nombre')
+        email = request.form.get('email')
+        contrasena = request.form.get('contrasena')
+        confirmar_contrasena = request.form.get('confirmar_contrasena')
+
+        # Validar nombre
+        if not validar_usuario(nombre):
+            flash('El nombre solo puede contener letras, números y guion bajo (4-20 caracteres).', 'danger')
+            return redirect(url_for('views.empleado_registro'))
+
+        # Validar email
+        if not validar_email(email):
+            flash('Correo electrónico inválido.', 'danger')
+            return redirect(url_for('views.empleado_registro'))
+
+        # Validar contraseña
+        error_password = validar_contrasena(contrasena)
+        if error_password:
+            flash(error_password, 'danger')
+            return redirect(url_for('views.empleado_registro'))
+
+        # Validar confirmación
+        if contrasena != confirmar_contrasena:
+            flash('Las contraseñas no coinciden.', 'danger')
+            return redirect(url_for('views.empleado_registro'))
+
+        # Verificar si ya existe
+        if Empleado.query.filter_by(email=email).first():
+            flash('El correo ya está registrado.', 'danger')
+            return redirect(url_for('views.empleado_registro'))
+
+        # Hash (igual que tu sistema)
+        hashed_password = hashlib.sha256(contrasena.encode()).hexdigest()
+
+        nuevo_empleado = Empleado(
+            nombre=nombre,
+            email=email,
+            password_hash=hashed_password,
+            estado='activo'
+        )
+
+        try:
+            db.session.add(nuevo_empleado)
+            db.session.commit()
+            flash('Empleado registrado con éxito.', 'success')
+            return redirect(url_for('views.login_empleado'))
+
+        except Exception as e:
+            db.session.rollback()
+            print(f'Error al registrar empleado: {str(e)}')
+            flash('Error al registrar empleado.', 'danger')
+            return redirect(url_for('views.empleado_registro'))
+
+    return render_template('empleado_registro.html')
+
+@views.route("/login_empleado", methods=['GET', 'POST'])
+def login_empleado():
+    if request.method == 'POST':
+        email = request.form.get('email')
+        contrasena = request.form.get('contrasena')
+
+        # Validar campos vacíos
+        if not email or not contrasena:
+            flash('Todos los campos son obligatorios.', 'danger')
+            return redirect(url_for('views.login_empleado'))
+
+        # Validar email
+        if not validar_email(email):
+            flash('Correo electrónico inválido.', 'danger')
+            return redirect(url_for('views.login_empleado'))
+
+        # Buscar empleado
+        empleado = Empleado.query.filter_by(email=email).first()
+
+        # ❗ Mensaje genérico (mejor práctica)
+        if not empleado:
+            flash('Credenciales inválidas.', 'danger')
+            return redirect(url_for('views.login_empleado'))
+
+        # Verificar contraseña
+        hashed_password = hashlib.sha256(contrasena.encode()).hexdigest()
+
+        if empleado.password_hash != hashed_password:
+            flash('Credenciales inválidas.', 'danger')
+            return redirect(url_for('views.login_empleado'))
+
+        # Validar estado
+        if empleado.estado != 'activo':
+            flash('Empleado inactivo.', 'danger')
+            return redirect(url_for('views.login_empleado'))
+
+        # Generar JWT
+        token = jwt.encode(
+            {
+                'id_empleado': empleado.id_empleado, 
+                'exp': datetime.utcnow() + timedelta(hours=2)
+            },
+            SECRET_KEY,
+            algorithm='HS256'
+        )
+
+        # Base64
+        token_base64 = base64.b64encode(token.encode()).decode()
+
+        # Cookie
+        response = make_response(redirect(url_for('views.panel_empleado')))
+        response.set_cookie('empleado_token', token_base64, httponly=True)
+
+        flash(f'Bienvenido, {empleado.nombre}', 'success')
+        return response
+
+    return render_template("login_empleado.html")
+
+
+#registro de clientes, login
+@views.route('/cliente_registro', methods=['GET', 'POST'])
+def cliente_registro():
+    if request.method == 'POST':
+        nombre = request.form.get('nombre')
+        email = request.form.get('email')
+        contrasena = request.form.get('contrasena')
+        confirmar_contrasena = request.form.get('confirmar_contrasena')
+
+        # Validar nombre
+        if not validar_usuario(nombre):
+            flash('El nombre solo puede contener letras, números y guion bajo (4-20 caracteres).', 'danger')
+            return redirect(url_for('views.cliente_registro'))
+
+        # Validar email
+        if not validar_email(email):
+            flash('Correo electrónico inválido.', 'danger')
+            return redirect(url_for('views.cliente_registro'))
+
+        # Validar contraseña
+        error_password = validar_contrasena(contrasena)
+        if error_password:
+            flash(error_password, 'danger')
+            return redirect(url_for('views.cliente_registro'))
+
+        # Confirmación
+        if contrasena != confirmar_contrasena:
+            flash('Las contraseñas no coinciden.', 'danger')
+            return redirect(url_for('views.cliente_registro'))
+
+        # Verificar existencia
+        if Cliente.query.filter_by(email=email).first():
+            flash('El correo ya está registrado.', 'danger')
+            return redirect(url_for('views.cliente_registro'))
+
+        # Hash (sin cambios)
+        hashed_password = hashlib.sha256(contrasena.encode()).hexdigest()
+
+        nuevo_cliente = Cliente(
+            nombre=nombre,
+            email=email,
+            password_hash=hashed_password
+        )
+
+        try:
+            db.session.add(nuevo_cliente)
+            db.session.commit()
+            flash('Registro exitoso.', 'success')
+            return redirect(url_for('views.home'))
+
+        except Exception as e:
+            db.session.rollback()
+            print(f'Error al registrar cliente: {str(e)}')
+            flash('Error al registrar cliente.', 'danger')
+            return redirect(url_for('views.cliente_registro'))
+
+    return render_template('cliente_registro.html')
+
+#login de clientes
+@views.route('/login_cliente', methods=['GET', 'POST'])
+def login_cliente():
+    if request.method == 'POST':
+        email = request.form.get('email')
+        contrasena = request.form.get('contrasena')
+
+        # Validar campos vacíos
+        if not email or not contrasena:
+            flash('Todos los campos son obligatorios.', 'danger')
+            return redirect(url_for('views.login_cliente'))
+
+        # Validar email
+        if not validar_email(email):
+            flash('Correo electrónico inválido.', 'danger')
+            return redirect(url_for('views.login_cliente'))
+
+        # Buscar cliente
+        cliente = Cliente.query.filter_by(email=email).first()
+
+        # Mensaje genérico
+        if not cliente:
+            flash('Credenciales inválidas.', 'danger')
+            return redirect(url_for('views.login_cliente'))
+
+        # Verificar contraseña
+        hashed_password = hashlib.sha256(contrasena.encode()).hexdigest()
+
+        if cliente.password_hash != hashed_password:
+            flash('Credenciales inválidas.', 'danger')
+            return redirect(url_for('views.login_cliente'))
+
+        # Generar JWT
+        token = jwt.encode(
+            {
+                'id_cliente': cliente.id_cliente,  
+                'exp': datetime.utcnow() + timedelta(hours=2)
+            },
+            SECRET_KEY,
+            algorithm='HS256'
+        )
+
+        # Base64
+        token_base64 = base64.b64encode(token.encode()).decode()
+
+        # Cookie
+        response = make_response(redirect(url_for('views.panel_cliente')))
+        response.set_cookie('token', token_base64, httponly=True)
+
+        flash(f'Bienvenido, {cliente.nombre}', 'success')
+        return response
+
+    return render_template('login_cliente.html')
