@@ -150,7 +150,7 @@ def token_required(f):
         except Exception as e:
             print(f"Error: {str(e)}")
             flash('Sesión inválida. Inicia sesión de nuevo.', 'danger')
-            return redirect(url_for('views.home'))
+            return redirect(url_for('views.login_cliente'))
 
         return f(current_user, *args, **kwargs)
 
