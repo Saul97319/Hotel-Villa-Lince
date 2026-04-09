@@ -5,7 +5,7 @@ from sqlalchemy.sql import func
 
 db = SQLAlchemy()
 
-class Sucursal(db.Mode):
+class Sucursal(db.Model):
     __tablename__ = 'sucursal'
 
     id_sucursal = Column(Integer, primary_key=True, autoincrement=True)
