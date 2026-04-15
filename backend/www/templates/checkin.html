@@ -1,0 +1,14 @@
+<h2>Confirmar Check-in</h2>
+
+<p><strong>Habitación:</strong> {{ reserva.habitacion.numero }}</p>
+<p><strong>Cliente:</strong> {{ reserva.cliente.nombre }}</p>
+<p><strong>Fecha llegada:</strong> {{ reserva.checkin }}</p>
+<p><strong>Fecha salida:</strong> {{ reserva.checkout }}</p>
+
+<form method="POST">
+    <button type="submit">Confirmar Check-in</button>
+</form>
+
+<a href="{{ url_for('views.ver_reservas') }}">
+    <button type="button">Cancelar</button>
+</a>

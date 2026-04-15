@@ -1,0 +1,22 @@
+<h2>Editar Habitación {{ habitacion.numero }}</h2>
+
+<form method="POST">
+    <label>Estado:</label>
+    <select name="estado">
+        <option value="Disponible">Disponible</option>
+        <option value="Ocupada">Ocupada</option>
+        <option value="Mantenimiento">Mantenimiento</option>
+    </select>
+
+    <label>Limpieza:</label>
+    <select name="estado_limpieza">
+        <option value="Limpia">Limpia</option>
+        <option value="Sucia">Sucia</option>
+    </select>
+
+    <button type="submit">Guardar</button>
+</form>
+
+<a href="{{ url_for('views.reservar_habitacion', id=habitacion.id_habitacion) }}">
+    Reservar
+</a>

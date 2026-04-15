@@ -1,13 +1,15 @@
 from flask import Blueprint, render_template, request, jsonify
-from base import Admin, Cliente, Empleado
+from base import Admin, Cliente, Empleado, Habitacion, Reserva, Sucursal, Empresa,Convenio
 from base import db
 from werkzeug.security import check_password_hash
 import jwt, base64, hashlib, datetime, re, decimal
 import datetime, re
 from functools import wraps
 from flask import request, redirect, url_for, flash
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from flask import make_response
+from sqlalchemy.orm import joinedload
+from sqlalchemy import or_, and_
 
 views = Blueprint('views', __name__)
 
@@ -585,8 +587,234 @@ def login_cliente():
 
     return render_template('login_cliente.html')
 
+#botones para cerrar sesión (eliminar cookie)
+#cliente
+@views.route('/logout_cliente')
+def logout_cliente():
+    response = make_response(redirect(url_for('views.login_cliente')))
+    
+    response.set_cookie(
+        'token',
+        '',
+        expires=0,
+        httponly=True,
+        secure=False,   # True si usas HTTPS
+        samesite='Lax'
+    )
+
+    flash('Sesión cerrada.', 'success')
+    return response
+
+#Administrador
+@views.route('/logout_admin')
+def logout_admin():
+    response = make_response(redirect(url_for('views.admin')))
+
+    response.set_cookie(
+        'admin_token',
+        '',
+        expires=0,
+        httponly=True,
+        secure=False,   # cámbialo a True si usas HTTPS
+        samesite='Lax'
+    )
+
+    flash('Sesión de administrador cerrada.', 'success')
+    return response
+
+#empleados
+@views.route('/logout_empleado')
+def logout_empleado():
+    response = make_response(redirect(url_for('views.login_empleado')))
+    response.set_cookie(
+        'empleado_token',
+        '',
+        expires=0,
+        httponly=True,
+        secure=False,   # cámbialo a True si usas HTTPS
+        samesite='Lax'
+    )
+
+    flash('Sesión de empleado cerrada.', 'success')
+    return response
+
 
 @views.route('/panel_cliente')
 @token_required #acceso solo para clientes, decorador cambia de acuerdo al rol
 def panel_cliente(current_user):
     return render_template('panel_cliente.html', cliente_usuario=current_user)
+
+
+#vista de empleados(mostrador) habitaciones, reservas, etc
+@views.route('/ini_empleados')
+@token_empleado
+def ini_empleados(current_user):
+    habitaciones = Habitacion.query.all()  # trae todas
+
+    return render_template(
+        'ini_empleados.html',
+        empleado_usuario=current_user,
+        habitaciones=habitaciones
+    )
+
+#seleccionar y editar estado de reservas
+#editar estado de habitaciones, limpieza
+@views.route('/habitacion/<int:id>', methods=['GET', 'POST'])
+@token_empleado
+def editar_habitacion(current_user, id):
+    habitacion = Habitacion.query.get_or_404(id)
+
+    if request.method == 'POST':
+        nuevo_estado = request.form.get('estado')
+        nueva_limpieza = request.form.get('estado_limpieza')
+
+        habitacion.estado = nuevo_estado
+        habitacion.estado_limpieza = nueva_limpieza
+
+        db.session.commit()
+
+        flash('Habitación actualizada correctamente', 'success')
+        return redirect(url_for('views.ini_empleados'))
+
+    return render_template('editar_habitacion.html', habitacion=habitacion)
+
+
+@views.route('/reservas')
+@token_empleado
+def ver_reservas(current_user):
+    reservas = Reserva.query.all()
+
+    return render_template(
+        'reservas.html',
+        reservas=reservas,
+        empleado_usuario=current_user
+    )
+
+@views.route('/reservar/<int:id>', methods=['GET', 'POST'])
+@token_empleado
+def reservar_habitacion(current_user, id):
+    habitacion = db.session.get(Habitacion, id)
+
+    if not habitacion:
+        flash('Habitación no encontrada', 'danger')
+        return redirect(url_for('views.ini_empleados'))
+
+    if request.method == 'POST':
+        cliente_id = request.form.get('cliente_id')
+        checkin = request.form.get('checkin')
+        checkout = request.form.get('checkout')
+
+        # Validaciones básicas
+        if not cliente_id or not checkin or not checkout:
+            flash('Todos los campos son obligatorios', 'danger')
+            return redirect(request.url)
+
+        if checkin > checkout:
+            flash('Fechas inválidas', 'danger')
+            return redirect(request.url)
+
+        # Validar disponibilidad (sin solapamientos)
+        conflicto = Reserva.query.filter(
+            Reserva.habitacion_id == id,
+            Reserva.estado.in_(['Reservada', 'Activa']),
+            Reserva.checkout > checkin,
+            Reserva.checkin < checkout
+        ).first()
+
+        if conflicto:
+            flash('La habitación no está disponible en esas fechas', 'danger')
+            return redirect(request.url)
+
+        nueva_reserva = Reserva(
+            cliente_id=cliente_id,
+            habitacion_id=id,
+            empleado_id=current_user.id_empleado,
+            sucursal_id=habitacion.sucursal_id,
+            fecha_reserva=date.today(),
+            checkin=checkin,
+            checkout=checkout,
+            estado='Reservada',
+            metodo_reserva='Mostrador'
+        )
+
+        db.session.add(nueva_reserva)
+        db.session.commit()
+
+        flash('Reserva creada correctamente', 'success')
+        return redirect(url_for('views.ini_empleados'))
+
+    return render_template('reservar.html', habitacion=habitacion)
+
+#check in, esto lo hace el empleado
+@views.route('/checkin/<int:id_reserva>', methods=['GET', 'POST'])
+@token_empleado
+def checkin(current_user, id_reserva):
+    reserva = db.session.get(Reserva, id_reserva)
+
+    if not reserva:
+        flash('Reserva no encontrada', 'danger')
+        return redirect(url_for('views.ver_reservas'))
+
+    if request.method == 'POST':
+        reserva.estado = 'Activa'
+        reserva.habitacion.estado = 'Ocupada'
+
+        db.session.commit()
+
+        flash('Check-in realizado correctamente', 'success')
+        return redirect(url_for('views.ver_reservas'))
+
+    return render_template('checkin.html', reserva=reserva)
+
+#barra de busqueda de empleados mostrador
+
+@views.route('/buscar_datos', methods=['POST'])
+@token_empleado 
+def buscar_datos(current_user):
+    query = request.form.get('query', '').strip()
+
+    if not query:
+        return redirect(url_for('views.ini_empleados'))
+
+    habitaciones = Habitacion.query.filter(
+        or_(
+            Habitacion.tipo.ilike(f"%{query}%"),
+            Habitacion.estado.ilike(f"%{query}%"),
+            Habitacion.estado_limpieza.ilike(f"%{query}%"),
+            Habitacion.numero.ilike(f"%{query}%")
+        )
+    ).all()
+
+    return render_template(
+        'ini_empleados.html',
+        empleado_usuario=current_user,
+        habitaciones=habitaciones,
+        busqueda=query
+    )
+
+#solo ver convenios (empleados)
+@views.route('/convenios')
+@token_empleado
+def ver_convenios(current_user):
+    convenios = Convenio.query.join(Empresa).all()
+
+    return render_template(
+        'convenios.html',
+        convenios=convenios,
+        empleado_usuario=current_user
+    )
+
+#visualizar convenios (clientes)
+@views.route('/convenios')
+@token_required
+def ver_convenios(current_user):
+    convenios = Convenio.query.join(Empresa).filter(
+        Convenio.activo == True,
+        Convenio.fecha_fin >= date.today()
+    ).all()
+
+    return render_template(
+        'convenios.html',
+        convenios=convenios,
+        cliente_usuario=current_user
+    )

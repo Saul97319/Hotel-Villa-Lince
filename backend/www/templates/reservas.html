@@ -1,0 +1,36 @@
+<h2>Reservas</h2>
+
+<table border="1">
+    <thead>
+        <tr>
+            <th>Habitación</th>
+            <th>Cliente</th>
+            <th>Check-in</th>
+            <th>Check-out</th>
+            <th>Estado</th>
+            <th>Acción</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for r in reservas %}
+        <tr>
+            <td>{{ r.habitacion.numero }}</td>
+            <td>{{ r.cliente.nombre }}</td>
+            <td>{{ r.checkin }}</td>
+            <td>{{ r.checkout }}</td>
+            <td>{{ r.estado }}</td>
+            <td>
+
+                {% if r.estado == 'Reservada' %}
+                <form method="POST" action="{{ url_for('views.checkin', id_reserva=r.id_reserva) }}">
+                    <button type="submit">Check-in</button>
+                </form>
+                {% else %}
+                    <button disabled>No disponible</button>
+                {% endif %}
+
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>

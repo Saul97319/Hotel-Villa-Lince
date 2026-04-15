@@ -1,0 +1,50 @@
+<h2>Habitaciones</h2>
+
+<!-- Barra de búsqueda -->
+<form method="GET" action="{{ url_for('views.buscar_datos') }}">
+    <input 
+        type="text" 
+        name="query" 
+        placeholder="Buscar por número, tipo, estado..." 
+        value="{{ busqueda or '' }}"
+    >
+    <button type="submit">Buscar</button>
+</form>
+
+<br>
+
+<!-- Tabla -->
+<table border="1">
+    <thead>
+        <tr>
+            <th>Número</th>
+            <th>Tipo</th>
+            <th>Precio</th>
+            <th>Estado</th>
+            <th>Limpieza</th>
+            <th>Acciones</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for h in habitaciones %}
+        <tr>
+            <td>{{ h.numero }}</td>
+            <td>{{ h.tipo }}</td>
+            <td>{{ h.precio_noche }}</td>
+            <td>{{ h.estado }}</td>
+            <td>{{ h.estado_limpieza }}</td>
+            <td>
+                <!-- Botón Editar -->
+                <a href="{{ url_for('views.editar_habitacion', id=h.id_habitacion) }}">
+                    <button type="button">Editar</button>
+                </a>
+
+                <!-- Botón Reservar -->
+                <a href="{{ url_for('views.reservar_habitacion', id=h.id_habitacion) }}">
+                    <button type="button">Reservar</button>
+                </a>
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>

@@ -1,0 +1,41 @@
+<!-- Encabezado dinámico según rol -->
+{% if cliente_usuario %}
+    <p>Bienvenido cliente: {{ cliente_usuario.nombre }}</p>
+{% endif %}
+
+{% if empleado_usuario %}
+    <p>Panel de empleado: {{ empleado_usuario.nombre }}</p>
+{% endif %}
+
+<h2>Convenios</h2>
+
+<table border="1">
+    <thead>
+        <tr>
+            <th>Empresa</th>
+            <th>RFC</th>
+            <th>Descuento</th>
+            <th>Inicio</th>
+            <th>Fin</th>
+            <th>Estado</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for c in convenios %}
+        <tr>
+            <td>{{ c.empresa.nombre }}</td>
+            <td>{{ c.empresa.rfc }}</td>
+            <td>{{ c.descuento }}%</td>
+            <td>{{ c.fecha_inicio }}</td>
+            <td>{{ c.fecha_fin }}</td>
+            <td>
+                {% if c.activo %}
+                    Activo
+                {% else %}
+                    Inactivo
+                {% endif %}
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
