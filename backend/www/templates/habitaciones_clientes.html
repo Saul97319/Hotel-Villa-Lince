@@ -1,0 +1,26 @@
+<h2>Habitaciones disponibles</h2>
+
+<table border="1">
+    <thead>
+        <tr>
+            <th>Número</th>
+            <th>Tipo</th>
+            <th>Precio</th>
+            <th>Acción</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for h in habitaciones %}
+        <tr>
+            <td>{{ h.numero }}</td>
+            <td>{{ h.tipo }}</td>
+            <td>${{ h.precio_noche }}</td>
+            <td>
+                <a href="{{ url_for('views.reservar_cliente', id=h.id_habitacion) }}">
+                    <button>Reservar</button>
+                </a>
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>

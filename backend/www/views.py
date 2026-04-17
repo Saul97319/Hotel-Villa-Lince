@@ -1,5 +1,5 @@
 from flask import Blueprint, render_template, request, jsonify
-from base import Admin, Cliente, Empleado, Habitacion, Reserva, Sucursal, Empresa,Convenio
+from base import Admin, Cliente, Empleado, Habitacion, Reserva, Sucursal, Empresa,Convenio, Factura, HuespedEmpresarial, Convenio, Pago, Servicio, FacturaDetalle, Reporte
 from base import db
 from werkzeug.security import check_password_hash
 import jwt, base64, hashlib, datetime, re, decimal
@@ -816,5 +816,125 @@ def ver_convenios(current_user):
     return render_template(
         'convenios.html',
         convenios=convenios,
+        cliente_usuario=current_user
+    )
+#facturacion 
+@views.route('/facturas')
+@token_empleado
+def ver_facturas_empleado(current_user):
+
+    facturas = Factura.query.all()
+
+    return render_template(
+        'facturas_empleado.html',
+        facturas=facturas,
+        empleado_usuario=current_user
+    )
+
+
+@views.route('/habitaciones')
+@token_required
+def ver_habitaciones_cliente(current_user):
+    habitaciones = Habitacion.query.filter_by(estado='Disponible').all()
+
+    return render_template(
+        'habitaciones_cliente.html',
+        habitaciones=habitaciones,
+        cliente_usuario=current_user
+    )
+
+#Reservas de cliente al dar cliek en la habitacion
+
+
+@views.route('/reservar_cliente/<int:id>', methods=['GET', 'POST'])
+@token_required
+def reservar_cliente(current_user, id):
+    habitacion = db.session.get(Habitacion, id)
+
+    if not habitacion or habitacion.estado != 'Disponible':
+        flash('Habitación no disponible', 'danger')
+        return redirect(url_for('views.ver_habitaciones_cliente'))
+
+    if request.method == 'POST':
+        checkin = request.form.get('checkin')
+        checkout = request.form.get('checkout')
+
+        if not checkin or not checkout:
+            flash('Selecciona fechas', 'danger')
+            return redirect(request.url)
+
+        if checkin > checkout:
+            flash('Fechas inválidas', 'danger')
+            return redirect(request.url)
+
+        nueva_reserva = Reserva(
+            cliente_id=current_user.id_cliente,
+            habitacion_id=id,
+            empleado_id=None,  # cliente online
+            sucursal_id=habitacion.sucursal_id,
+            fecha_reserva=date.today(),
+            checkin=checkin,
+            checkout=checkout,
+            estado='Reservada',
+            metodo_reserva='Online'
+        )
+
+        db.session.add(nueva_reserva)
+        db.session.commit()
+
+        flash('Reserva realizada correctamente', 'success')
+        return redirect(url_for('views.ver_habitaciones_cliente'))
+
+    return render_template('reservar_cliente.html', habitacion=habitacion)
+
+#barra busqueda habitaciones clientes}
+
+@views.route('/buscar_habitaciones', methods=['GET'])
+@token_required
+def buscar_habitaciones(current_user):
+    query = request.args.get('query', '').strip()
+    tipo = request.args.get('tipo', '')
+    precio_max = request.args.get('precio_max')
+
+    habitaciones = Habitacion.query.filter_by(estado='Disponible')
+
+    # búsqueda general
+    if query:
+        habitaciones = habitaciones.filter(
+            or_(
+                Habitacion.tipo.ilike(f"%{query}%"),
+                Habitacion.numero.like(f"%{query}%")
+            )
+        )
+
+    # iltro por tipo
+    if tipo:
+        habitaciones = habitaciones.filter(Habitacion.tipo == tipo)
+
+    # filtro por precio máximo
+    if precio_max:
+        habitaciones = habitaciones.filter(Habitacion.precio_noche <= precio_max)
+
+    habitaciones = habitaciones.all()
+
+    return render_template(
+        'habitaciones_cliente.html',
+        habitaciones=habitaciones,
+        cliente_usuario=current_user,
+        busqueda=query
+    )
+
+#facturas clientes
+@views.route('/mis_facturas')
+@token_required
+def ver_facturas_cliente(current_user):
+
+    facturas = Factura.query.join(Reserva).filter(
+        Reserva.cliente_id == current_user.id_cliente
+    ).all()
+
+    return render_template(
+        'facturas_cliente.html',
+        facturas=facturas,
         cliente_usuario=current_user
     )
