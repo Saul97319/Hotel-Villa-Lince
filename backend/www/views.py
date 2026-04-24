@@ -1055,3 +1055,5 @@ def dashboard_admin(current_user):
         cancelaciones_hoy=cancelaciones_hoy,
         no_show=no_show
     )
+
+#Hacer metricas
