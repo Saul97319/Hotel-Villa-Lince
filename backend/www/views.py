@@ -10,6 +10,9 @@ from datetime import date, datetime, timedelta
 from flask import make_response
 from sqlalchemy.orm import joinedload
 from sqlalchemy import or_, and_
+from sqlalchemy.sql import func
+from decimal import Decimal
+from datetime import datetime
 
 views = Blueprint('views', __name__)
 
@@ -205,7 +208,60 @@ def token_empleado(f):
 
     return decorated
 
+#Funcion generar facturas 
+def generar_factura(reserva_id, empleado_id, empresa_id=None):
+    reserva = Reserva.query.get(reserva_id)
 
+    if not reserva:
+        return False, "Reserva no encontrada"
+
+    if reserva.factura:
+        return False, "La reserva ya tiene factura"
+
+    # Calcular noches
+    noches = (reserva.checkout - reserva.checkin).days
+
+    #  Precio habitación
+    precio_noche = Decimal(reserva.habitacion.precio_noche)
+    total_habitacion = noches * precio_noche
+
+    # Servicios no facturados
+    servicios = Servicio.query.filter_by(
+        reserva_id=reserva_id,
+        facturado=False
+    ).all()
+
+    total_servicios = sum(Decimal(s.costo) for s in servicios)
+
+    total = total_habitacion + total_servicios
+
+    # Crear factura
+    factura = Factura(
+        reserva_id=reserva_id,
+        empresa_id=empresa_id,
+        total=total,
+        estado="GENERADA",
+        tipo_envio="DIGITAL",
+        fecha_emision=datetime.now(),
+        generado_por_empleado=empleado_id
+    )
+
+    db.session.add(factura)
+    db.session.flush()  # para obtener id_factura
+
+    # Crear detalles de servicios
+    for servicio in servicios:
+        detalle = FacturaDetalle(
+            factura_id=factura.id_factura,
+            servicio_id=servicio.id_servicio,
+            subtotal=servicio.costo
+        )
+        servicio.facturado = True
+        db.session.add(detalle)
+
+    db.session.commit()
+
+    return True, "Factura generada correctamente"
 #vista de inicio, prueba
 
 @views.route('/')
@@ -923,6 +979,20 @@ def buscar_habitaciones(current_user):
         cliente_usuario=current_user,
         busqueda=query
     )
+#Generar factura (empleados)
+@views.route('/generar_factura/<int:reserva_id>', methods=['POST'])
+@token_empleado
+def generar_factura_route(current_user, reserva_id):
+
+    success, message = generar_factura(
+        reserva_id=reserva_id,
+        empleado_id=current_user.id_empleado
+    )
+
+    if success:
+        return {"msg": message}, 201
+    else:
+        return {"error": message}, 400
 
 #facturas clientes
 @views.route('/mis_facturas')
@@ -937,4 +1007,51 @@ def ver_facturas_cliente(current_user):
         'facturas_cliente.html',
         facturas=facturas,
         cliente_usuario=current_user
+    )
+#CAuadros de estado vista admin, rentados, disponibles, llegadas hoy, cancelaciones hoy.
+@views.route('/dashboard_admin')
+@token_empleado
+def dashboard_admin(current_user):
+
+    hoy = date.today()
+
+    # Habitaciones
+    total_habitaciones = Habitacion.query.count()
+
+    habitaciones_ocupadas = db.session.query(Habitacion).join(Reserva).filter(
+        Reserva.checkin <= hoy,
+        Reserva.checkout > hoy,
+        Reserva.estado == "ACTIVA"
+    ).count()
+
+    habitaciones_disponibles = total_habitaciones - habitaciones_ocupadas
+
+    # Llegadas hoy (check-in hoy)
+    llegadas_hoy = Reserva.query.filter(
+        Reserva.checkin == hoy,
+        Reserva.estado == "ACTIVA"
+    ).count()
+
+    # Cancelaciones hoy
+    cancelaciones_hoy = Reserva.query.filter(
+        Reserva.estado == "CANCELADA",
+        Reserva.fecha_reserva == hoy
+    ).count()
+
+    # No show (reservas que debían llegar hoy pero no llegaron)
+    no_show = Reserva.query.filter(
+        Reserva.checkin == hoy,
+        Reserva.estado == "NO_SHOW"
+    ).count()
+
+    return render_template(
+        'dashboard_admin.html',
+        empleado_usuario=current_user,
+
+        habitaciones_disponibles=habitaciones_disponibles,
+        habitaciones_ocupadas=habitaciones_ocupadas,
+
+        llegadas_hoy=llegadas_hoy,
+        cancelaciones_hoy=cancelaciones_hoy,
+        no_show=no_show
     )
