@@ -1057,3 +1057,5 @@ def dashboard_admin(current_user):
     )
 
 #Hacer metricas
+#CRUD PARA MANEJO DE CRUD, BORRADO DE USUARIOS "EMPLEADOS"
+#
