@@ -1056,3 +1056,193 @@ def dashboard_admin(current_user):
         no_show=no_show
     )
 
+
+# ENDPOINTS DE ESTADÍSTICAS 
+
+@views.route('/overview_admin', methods=['GET'])
+@token_admin
+def stats_overview(current_user):
+    """Resumen general de estadísticas"""
+    try:
+        today = date.today()
+        start_of_month = today.replace(day=1)
+        
+        # Total de habitaciones
+        total_habitaciones = Habitacion.query.count()
+        
+        # Habitaciones ocupadas hoy
+        ocupadas_hoy = db.session.query(Habitacion).join(Reserva).filter(
+            Reserva.checkin <= today,
+            Reserva.checkout > today,
+            Reserva.estado == "Activa"
+        ).count()
+        
+        # Total de reservas este mes
+        reservas_mes = Reserva.query.filter(
+            Reserva.fecha_reserva >= start_of_month
+        ).count()
+        
+        # Ingresos este mes
+        ingresos_mes = db.session.query(func.sum(Pago.monto)).filter(
+            Pago.fecha_pago >= start_of_month,
+            Pago.estado_pago == "Completado"
+        ).scalar() or 0
+        
+        # Ocupación promedio (%)
+        ocupacion_promedio = round((ocupadas_hoy / total_habitaciones * 100), 2) if total_habitaciones > 0 else 0
+        
+        return jsonify({
+            'total_habitaciones': total_habitaciones,
+            'ocupadas_hoy': ocupadas_hoy,
+            'disponibles_hoy': total_habitaciones - ocupadas_hoy,
+            'reservas_mes': reservas_mes,
+            'ingresos_mes': float(ingresos_mes),
+            'ocupacion_promedio': ocupacion_promedio
+        }), 200
+        
+    except Exception as e:
+        print(f"Error en stats_overview: {str(e)}")
+        return jsonify({'error': 'Error al obtener estadísticas'}), 500
+
+@views.route('/reservaciones_por_mes', methods=['GET'])
+@token_admin
+def stats_reservations_by_month(current_user):
+    """Gráfica de reservas por mes (últimos 12 meses)"""
+    try:
+        today = date.today()
+        months_data = []
+        
+        for i in range(11, -1, -1):
+            # Calcular primer y último día del mes
+            first_day = today.replace(day=1) - timedelta(days=i*30)
+            first_day = first_day.replace(day=1)
+            
+            if first_day.month == 12:
+                last_day = first_day.replace(year=first_day.year + 1, month=1, day=1) - timedelta(days=1)
+            else:
+                last_day = first_day.replace(month=first_day.month + 1, day=1) - timedelta(days=1)
+            
+            count = Reserva.query.filter(
+                Reserva.fecha_reserva >= first_day,
+                Reserva.fecha_reserva <= last_day
+            ).count()
+            
+            months_data.append({
+                'month': first_day.strftime('%b %Y'),
+                'count': count
+            })
+        
+        return jsonify({'data': months_data}), 200
+        
+    except Exception as e:
+        print(f"Error en stats_reservations_by_month: {str(e)}")
+        return jsonify({'error': 'Error al obtener reservas por mes'}), 500
+
+@views.route('/ingresos_por_mes', methods=['GET'])
+@token_admin
+def stats_revenue_by_month(current_user):
+    """Gráfica de ingresos por mes (últimos 12 meses)"""
+    try:
+        today = date.today()
+        months_data = []
+        
+        for i in range(11, -1, -1):
+            # Calcular primer y último día del mes
+            first_day = today.replace(day=1) - timedelta(days=i*30)
+            first_day = first_day.replace(day=1)
+            
+            if first_day.month == 12:
+                last_day = first_day.replace(year=first_day.year + 1, month=1, day=1) - timedelta(days=1)
+            else:
+                last_day = first_day.replace(month=first_day.month + 1, day=1) - timedelta(days=1)
+            
+            revenue = db.session.query(func.sum(Pago.monto)).filter(
+                Pago.fecha_pago >= first_day,
+                Pago.fecha_pago <= last_day,
+                Pago.estado_pago == "Completado"
+            ).scalar() or 0
+            
+            months_data.append({
+                'month': first_day.strftime('%b %Y'),
+                'revenue': float(revenue)
+            })
+        
+        return jsonify({'data': months_data}), 200
+        
+    except Exception as e:
+        print(f"Error en stats_revenue_by_month: {str(e)}")
+        return jsonify({'error': 'Error al obtener ingresos por mes'}), 500
+
+@views.route('/ocupacion_habitaciones', methods=['GET'])
+@token_admin
+def stats_room_occupancy(current_user):
+    """Ocupación de habitaciones por tipo"""
+    try:
+        today = date.today()
+        
+        # Obtener todos los tipos de habitación
+        types = db.session.query(Habitacion.tipo, func.count(Habitacion.id_habitacion)).group_by(
+            Habitacion.tipo
+        ).all()
+        
+        occupancy_data = []
+        
+        for tipo, total in types:
+            # Contar ocupadas por tipo
+            ocupadas = db.session.query(func.count(Habitacion.id_habitacion)).join(Reserva).filter(
+                Habitacion.tipo == tipo,
+                Reserva.checkin <= today,
+                Reserva.checkout > today,
+                Reserva.estado == "Activa"
+            ).scalar() or 0
+            
+            porcentaje = round((ocupadas / total * 100), 2) if total > 0 else 0
+            
+            occupancy_data.append({
+                'tipo': tipo,
+                'total': total,
+                'ocupadas': ocupadas,
+                'disponibles': total - ocupadas,
+                'porcentaje': porcentaje
+            })
+        
+        return jsonify({'data': occupancy_data}), 200
+        
+    except Exception as e:
+        print(f"Error en stats_room_occupancy: {str(e)}")
+        return jsonify({'error': 'Error al obtener ocupación de habitaciones'}), 500
+
+@views.route('/ingresos_por_periodo', methods=['GET'])
+@token_admin
+def stats_revenue_by_period(current_user):
+    """Ingresos por período (por tipo de habitación)"""
+    try:
+        today = date.today()
+        start_of_month = today.replace(day=1)
+        
+        # Ingresos por tipo de habitación
+        revenue_by_type = db.session.query(
+            Habitacion.tipo,
+            func.sum(Pago.monto)
+        ).join(Reserva, Pago.reserva_id == Reserva.id_reserva).join(
+            Habitacion, Reserva.habitacion_id == Habitacion.id_habitacion
+        ).filter(
+            Pago.fecha_pago >= start_of_month,
+            Pago.estado_pago == "Completado"
+        ).group_by(Habitacion.tipo).all()
+        
+        data = []
+        for tipo, revenue in revenue_by_type:
+            data.append({
+                'tipo': tipo if tipo else 'Sin especificar',
+                'revenue': float(revenue) if revenue else 0
+            })
+        
+        return jsonify({'data': data}), 200
+        
+    except Exception as e:
+        print(f"Error en stats_revenue_by_period: {str(e)}")
+        return jsonify({'error': 'Error al obtener ingresos por período'}), 500
+
+
+
