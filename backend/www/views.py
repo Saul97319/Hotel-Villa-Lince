@@ -1056,6 +1056,3 @@ def dashboard_admin(current_user):
         no_show=no_show
     )
 
-#Hacer metricas
-#CRUD PARA MANEJO DE CRUD, BORRADO DE USUARIOS "EMPLEADOS"
-#
