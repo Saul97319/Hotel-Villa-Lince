@@ -79,6 +79,11 @@ Para probar la aplicación en React, puedes usar las siguientes credenciales. *(
 | **Gerente** | gerente@hotel.com | gerente123 |
 | **Empleado** | empleado@hotel.com | empleado123 |
 
+admin1@test.com = hashA
+admin2@test.com = hashB
+admin3@test.com = hashC
+admin4@test.com = hashD
+admin@hotel.com = hashE
 ------------------------------------------------------------------------------------------------------
 
 # Detener el proyecto #
