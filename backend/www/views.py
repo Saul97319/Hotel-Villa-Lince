@@ -1,9 +1,10 @@
 from flask import Blueprint, render_template, request, jsonify
-from base import Admin, Cliente, Empleado, Habitacion, Reserva, Sucursal, Empresa,Convenio, Factura, HuespedEmpresarial, Convenio, Pago, Servicio, FacturaDetalle, Reporte
+from base import Admin, Cliente, Empleado, Habitacion, Reserva, Sucursal, Empresa, Convenio, Factura, HuespedEmpresarial, Pago, Servicio, FacturaDetalle, Reporte, DetallesHuesped
 from base import db
 from werkzeug.security import check_password_hash
 import jwt, base64, hashlib, datetime, re, decimal
 import datetime, re
+import uuid
 from functools import wraps
 from flask import request, redirect, url_for, flash
 from datetime import date, datetime, timedelta
@@ -13,6 +14,13 @@ from sqlalchemy import or_, and_
 from sqlalchemy.sql import func
 from decimal import Decimal
 from datetime import datetime
+from sqlalchemy import text
+from datetime import timedelta
+from base import db, Factura, Reserva, Pago, Servicio, Empresa, Convenio, Habitacion, DetallesHuesped, FacturaDetalle
+from flask import jsonify, request
+import uuid
+import time
+from decimal import Decimal
 
 views = Blueprint('views', __name__)
 
@@ -77,41 +85,59 @@ def validar_usuario(usuario):
 def token_admin(f):
     @wraps(f)
     def decorated(*args, **kwargs):
-        token_base64 = request.cookies.get('admin_token')
+        token = None
+        is_api_request = False
 
-        if not token_base64:
+        # 1. Intentamos leer el token de las cabeceras (Método React / SPA)
+        auth_header = request.headers.get('Authorization')
+        if auth_header and auth_header.startswith('Bearer '):
+            token = auth_header.split(' ')[1]
+            is_api_request = True  # Si usa Bearer, sabemos que es React pidiendo JSON
+        
+        # 2. Si no hay cabecera, buscamos en las cookies (Método Jinja/HTML antiguo)
+        if not token:
+            token_base64 = request.cookies.get('admin_token')
+            if token_base64:
+                try:
+                    token = base64.b64decode(token_base64).decode()
+                except Exception:
+                    pass
+
+        # Si de ninguna forma hay token, bloqueamos el paso
+        if not token:
+            if is_api_request or request.headers.get('Content-Type') == 'application/json':
+                return jsonify({'error': 'Acceso no autorizado. Token faltante.'}), 401
             flash('Acceso no autorizado. Inicia sesión.', 'danger')
             return redirect(url_for('views.admin'))
 
         try:
-            # Decodificar Base64
-            token = base64.b64decode(token_base64).decode()
-
-            # Decodificar JWT
+            # Decodificamos el JWT
             data = jwt.decode(token, SECRET_KEY, algorithms=['HS256'])
-
             current_user = Admin.query.filter_by(email=data['email']).first()
 
-            # Validación de existencia
-            if not current_user:
-                flash('Sesión inválida. Inicia sesión de nuevo.', 'danger')
-                return redirect(url_for('views.admin'))
-
-            # (Opcional pero recomendado)
-            if current_user.estado != 'activo':
-                flash('Usuario inactivo.', 'danger')
+            # Validación de existencia y estado
+            if not current_user or current_user.estado != 'activo':
+                if is_api_request:
+                    return jsonify({'error': 'Usuario inválido o inactivo.'}), 401
+                flash('Sesión inválida o inactiva.', 'danger')
                 return redirect(url_for('views.admin'))
 
         except jwt.ExpiredSignatureError:
+            if is_api_request:
+                return jsonify({'error': 'El token ha expirado.'}), 401
             flash('El token ha expirado.', 'danger')
             return redirect(url_for('views.admin'))
 
         except jwt.InvalidTokenError:
+            if is_api_request:
+                return jsonify({'error': 'Token inválido.'}), 401
             flash('Token inválido.', 'danger')
             return redirect(url_for('views.admin'))
 
         except Exception as e:
             print(f"Error al validar token: {str(e)}")
+            if is_api_request:
+                return jsonify({'error': 'Error de autenticación.'}), 500
             flash('Error de autenticación.', 'danger')
             return redirect(url_for('views.admin'))
 
@@ -848,32 +874,22 @@ def buscar_datos(current_user):
         busqueda=query
     )
 
-#solo ver convenios (empleados)
-@views.route('/convenios')
+# Solo ver convenios (Empleados)
+@views.route('/empleado_convenios')
 @token_empleado
-def ver_convenios(current_user):
+def ver_convenios_empleado(current_user):  # <-- Asegura este nombre
     convenios = Convenio.query.join(Empresa).all()
+    return render_template('convenios.html', convenios=convenios, empleado_usuario=current_user)
 
-    return render_template(
-        'convenios.html',
-        convenios=convenios,
-        empleado_usuario=current_user
-    )
-
-#visualizar convenios (clientes)
-@views.route('/convenios')
+# Visualizar convenios (Clientes)
+@views.route('/cliente_convenios')
 @token_required
-def ver_convenios(current_user):
+def ver_convenios_cliente(current_user):   # <-- Asegura este nombre
     convenios = Convenio.query.join(Empresa).filter(
         Convenio.activo == True,
         Convenio.fecha_fin >= date.today()
     ).all()
-
-    return render_template(
-        'convenios.html',
-        convenios=convenios,
-        cliente_usuario=current_user
-    )
+    return render_template('convenios.html', convenios=convenios, cliente_usuario=current_user)
 #facturacion 
 @views.route('/facturas')
 @token_empleado
@@ -1244,5 +1260,1115 @@ def stats_revenue_by_period(current_user):
         print(f"Error en stats_revenue_by_period: {str(e)}")
         return jsonify({'error': 'Error al obtener ingresos por período'}), 500
 
+@views.route('/api/login', methods=['POST'])
+def api_login():
+    data = request.get_json()
+    email = data.get('email')
+    password = data.get('password')
+
+    if not email or not password:
+        return jsonify({'error': 'Todos los campos son obligatorios.'}), 400
+
+    # Generar el hash de la contraseña para comparar (según tu lógica actual de SHA256)
+    hashed_password = hashlib.sha256(password.encode()).hexdigest()
+
+    # 1. Buscar en Administradores
+    admin = Admin.query.filter_by(email=email).first()
+    if admin:
+        if admin.password_hash == hashed_password:
+            if admin.estado != 'activo':
+                return jsonify({'error': 'Usuario inactivo.'}), 403
+            token = jwt.encode({'email': admin.email, 'exp': datetime.utcnow() + timedelta(hours=2)}, SECRET_KEY, algorithm='HS256')
+            return jsonify({'token': token, 'rol': 'admin'}), 200
+        else:
+            return jsonify({'error': 'Contraseña incorrecta.'}), 401
+
+    # 2. Buscar en Empleados (incluye Gerente y Empleado de mostrador)
+    empleado = Empleado.query.filter_by(email=email).first()
+    if empleado:
+        if empleado.password_hash == hashed_password:
+            if empleado.estado != 'activo':
+                return jsonify({'error': 'Empleado inactivo.'}), 403
+            token = jwt.encode({'id_empleado': empleado.id_empleado, 'exp': datetime.utcnow() + timedelta(hours=2)}, SECRET_KEY, algorithm='HS256')
+            # Retornamos el rol almacenado en la base de datos (convertido a minúsculas para hacer match con React)
+            return jsonify({'token': token, 'rol': empleado.rol.lower()}), 200
+        else:
+            return jsonify({'error': 'Contraseña incorrecta.'}), 401
+
+    # 3. Buscar en Clientes
+    cliente = Cliente.query.filter_by(email=email).first()
+    if cliente:
+        # Nota: Asegúrate de tener la columna password_hash en la tabla Cliente en base.py si vas a usarlo aquí
+        if hasattr(cliente, 'password_hash') and cliente.password_hash == hashed_password:
+            token = jwt.encode({'id_cliente': cliente.id_cliente, 'exp': datetime.utcnow() + timedelta(hours=2)}, SECRET_KEY, algorithm='HS256')
+            return jsonify({'token': token, 'rol': 'cliente'}), 200
+        else:
+            return jsonify({'error': 'Contraseña incorrecta.'}), 401
+
+    return jsonify({'error': 'Credenciales inválidas corporativas.'}), 401
+
+@views.route('/api/habitaciones', methods=['GET'])
+def api_get_habitaciones():
+    try:
+        # Consultamos todas las habitaciones de la BD
+        habitaciones_db = Habitacion.query.all()
+        resultado = []
+
+        for hab in habitaciones_db:
+            # Formateamos el estado para que coincida con el frontend (minúsculas)
+            # Aseguramos que si está vacío diga 'disponible'
+            estado_actual = hab.estado.lower() if hab.estado else "disponible"
+            
+            # Construimos el diccionario base que espera React
+            hab_data = {
+                "id_db": hab.id_habitacion, # El ID real en la tabla
+                "id": str(hab.numero),      # El número visual (ej. 101)
+                "type": hab.tipo,           # Ej. 'Suite', 'Doble'
+                "status": estado_actual,
+                "precio": float(hab.precio_noche) if hab.precio_noche else 0.0,
+                "guest": None,
+                "folio": None,
+                "guestDetails": None
+            }
+
+            if estado_actual in ["ocupada", "reservada"]:
+                # Buscamos la reserva activa o programada para esta habitación
+                reserva_activa = Reserva.query.filter(
+                    Reserva.habitacion_id == hab.id_habitacion,
+                    Reserva.estado.in_(["Activa", "Reservada"])
+                ).first()
+
+                if reserva_activa and reserva_activa.cliente:
+                    cliente = reserva_activa.cliente
+                    detalles = reserva_activa.detalles_huesped 
+                    
+                    # --- NUEVO SISTEMA DE FOLIO DINÁMICO ---
+                    fecha_reserva = reserva_activa.fecha_reserva
+                    codigo_fecha = fecha_reserva.strftime('%y%m') if fecha_reserva else "0000"
+                    codigo_hex = f"{reserva_activa.id_reserva:04X}"
+                    folio_profesional = f"VL-{codigo_fecha}-{codigo_hex}"
+                    
+                    hab_data["guest"] = f"{cliente.nombre} {cliente.apellido}".strip()
+                    hab_data["folio"] = folio_profesional
+                    
+                    hab_data["guestDetails"] = {
+                        "telefono": detalles.telefono if (detalles and detalles.telefono) else "No registrado",
+                        "email": detalles.email if (detalles and detalles.email) else "No registrado",
+                        "empresa": detalles.cargo.split(" :: ")[0] if (detalles and detalles.cargo and " :: " in detalles.cargo) else (detalles.cargo if detalles else "Particular"),
+                        "fechaEntrada": reserva_activa.checkin.strftime("%Y-%m-%d") if reserva_activa.checkin else "N/A",
+                        "fechaSalida": reserva_activa.checkout.strftime("%Y-%m-%d") if reserva_activa.checkout else "N/A",
+                        "fechaNacimiento": detalles.fecha_nacimiento.strftime("%Y-%m-%d") if (detalles and detalles.fecha_nacimiento) else "No registrado",
+                        "personas": detalles.personas if detalles else 1,
+                        "notas": f"RFC: {detalles.rfc}" if (detalles and detalles.rfc) else "Ninguna nota adicional."
+                    }
+
+            resultado.append(hab_data)
+
+        return jsonify(resultado), 200
+
+    except Exception as e:
+        print(f"Error al obtener habitaciones: {str(e)}")
+        return jsonify({'error': 'Error interno del servidor al cargar habitaciones'}), 500
+
+@views.route('/api/seed_habitaciones', methods=['GET'])
+def seed_habitaciones():
+    try:
+
+        db.session.execute(text("SET FOREIGN_KEY_CHECKS = 0;"))
+        db.session.execute(text("DELETE FROM factura")) # Borra hijos
+        db.session.execute(text("DELETE FROM reserva")) # Borra dependientes
+        db.session.execute(text("DELETE FROM habitacion")) # Borra padres
+
+        db.session.execute(text("SET FOREIGN_KEY_CHECKS = 1;"))
+        db.session.commit()
+
+        plan_habitaciones = [
+            {"tipo": "Individual", "cantidad": 10, "precio": 900.00},
+            {"tipo": "Doble", "cantidad": 15, "precio": 1200.00},
+            {"tipo": "Matrimonial", "cantidad": 10, "precio": 1400.00},
+            {"tipo": "Ejecutiva", "cantidad": 5, "precio": 1800.00},
+            {"tipo": "Suite", "cantidad": 5, "precio": 2800.00},
+            {"tipo": "Familiar", "cantidad": 5, "precio": 3500.00}
+        ]
+
+        numero_actual = 101 # Empezamos en la habitación 101
+
+        for plan in plan_habitaciones:
+            for _ in range(plan["cantidad"]):
+                nueva_hab = Habitacion(
+                    numero=numero_actual,
+                    tipo=plan["tipo"],
+                    precio_noche=plan["precio"],
+                    estado="Disponible", # Todas nacerán como Disponibles
+                    estado_limpieza="Limpia",
+                    sucursal_id=1
+                )
+                db.session.add(nueva_hab)
+                numero_actual += 1
+
+                if str(numero_actual).endswith('11') and plan["tipo"] == "Individual":
+                    numero_actual = 201
+                elif str(numero_actual).endswith('16') and plan["tipo"] == "Doble":
+                    numero_actual = 301
+                elif str(numero_actual).endswith('11') and plan["tipo"] == "Matrimonial":
+                    numero_actual = 401
+
+        db.session.commit()
+        return jsonify({"mensaje": "¡Éxito! Base de datos limpiada y 50 Habitaciones nuevas creadas correctamente."}), 201
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": f"Hubo un problema al crear las habitaciones: {str(e)}"}), 500
+
+@views.route('/api/checkin', methods=['POST'])
+def api_checkin_rapido():
+    data = request.get_json()
+    
+    # Extraer campos del Súper Formulario
+    nombre_huesped = data.get('nombre')
+    habitacion_numero = data.get('habitacion_id')
+    personas = data.get('personas', 1)
+    fecha_nacimiento_str = data.get('fechaNacimiento')
+    fecha_entrada_str = data.get('fechaEntrada')
+    fecha_salida_str = data.get('fechaSalida')
+    telefono = data.get('telefono', '')
+    email = data.get('email', '')
+    rfc = data.get('rfc', '')
+    empresa_input = data.get('empresa', '')
+    cargo_input = data.get('cargo', '')
+
+    # Empaquetamos la empresa y el cargo de forma segura usando el separador estricto
+    cargo_final = f"{empresa_input} :: {cargo_input}" if empresa_input else cargo_input
+
+    if not nombre_huesped or not habitacion_numero or not fecha_entrada_str or not fecha_salida_str:
+        return jsonify({'error': 'Faltan campos obligatorios para el Check-in'}), 400
+
+    try:
+        # Convertimos los strings a objetos tipo date de Python
+        fecha_entrada = datetime.strptime(fecha_entrada_str, '%Y-%m-%d').date()
+        fecha_salida = datetime.strptime(fecha_salida_str, '%Y-%m-%d').date()
+        fecha_nacimiento = datetime.strptime(fecha_nacimiento_str, '%Y-%m-%d').date() if fecha_nacimiento_str else None
+
+        # Buscamos la habitación por su número visual (ej. 101)
+        habitacion = Habitacion.query.filter_by(numero=habitacion_numero).first()
+        
+        if not habitacion or habitacion.estado.lower() != "disponible":
+            return jsonify({'error': 'Habitación no válida o no disponible'}), 400
+
+        # Si el huésped trae datos de empresa, se cataloga automáticamente como Ejecutivo
+        tipo_cliente_final = "Ejecutivo" if empresa_input else "Particular"
+
+        # 1. Crear Cliente con su tipo correspondiente
+        nuevo_cliente = Cliente(
+            nombre=nombre_huesped,
+            apellido="", 
+            telefono=telefono,
+            email=email,
+            tipo_cliente=tipo_cliente_final,
+            fecha_registro=datetime.now()
+        )
+        db.session.add(nuevo_cliente)
+        db.session.flush() # Asigna un ID temporal al cliente para usarlo en la reserva
+
+        # 2. Actualizar el estado de la Habitación
+        habitacion.estado = "Ocupada"
+
+        # 3. Crear la Reserva Activa
+        nueva_reserva = Reserva(
+            cliente_id=nuevo_cliente.id_cliente,
+            habitacion_id=habitacion.id_habitacion,
+            sucursal_id=habitacion.sucursal_id,
+            fecha_reserva=date.today(),
+            checkin=fecha_entrada,
+            checkout=fecha_salida,
+            estado="Activa",
+            metodo_reserva="Mostrador"
+        )
+        db.session.add(nueva_reserva)
+        db.session.flush()
+
+        # 4. Crear los Detalles del Huésped guardando el cargo unificado
+        nuevos_detalles = DetallesHuesped(
+            reserva_id=nueva_reserva.id_reserva,
+            fecha_nacimiento=fecha_nacimiento,
+            personas=personas,
+            telefono=telefono,
+            email=email,
+            cargo=cargo_final,
+            rfc=rfc
+        )
+        db.session.add(nuevos_detalles)
+        
+        # Guardamos de forma definitiva en MySQL
+        db.session.commit()
+        return jsonify({'mensaje': 'Check-in realizado con éxito'}), 200
+
+    except Exception as e:
+        db.session.rollback()
+        print(f"Error crítico en check-in: {str(e)}")
+        return jsonify({'error': 'Ocurrió un error al procesar el Check-in en el servidor.'}), 500
+    
+@views.route('/api/checkout', methods=['POST'])
+def api_checkout():
+    data = request.get_json()
+    habitacion_numero = data.get('habitacion_id')
+    
+    if not habitacion_numero:
+        return jsonify({'error': 'Falta seleccionar la habitación a liberar'}), 400
+        
+    try:
+        habitacion = Habitacion.query.filter_by(numero=habitacion_numero).first()
+        if not habitacion:
+            return jsonify({'error': 'Habitación no encontrada en el sistema'}), 404
+            
+        reserva = Reserva.query.filter_by(habitacion_id=habitacion.id_habitacion, estado='Activa').first()
+        if not reserva:
+            return jsonify({'error': 'No hay una reserva activa en esta habitación'}), 404
+            
+        cliente = reserva.cliente
+        detalles_huesped = reserva.detalles_huesped
+
+        # 1. Calcular noches de estadía reales
+        fecha_in = reserva.checkin
+        fecha_out = reserva.checkout
+        noches = (fecha_out - fecha_in).days
+        if noches <= 0: 
+            noches = 1 
+
+        precio_noche = float(habitacion.precio_noche or 0.0)
+        subtotal_hospedaje = precio_noche * noches
+
+        # 2. SISTEMA DE EXTRACCIÓN PARSEO CORPORATIVO DE CONVENIO
+        porcentaje_descuento = 0.0
+        id_empresa_factura = None
+
+        if cliente and detalles_huesped and detalles_huesped.cargo:
+            # Descomponemos el string (Ej: "Bimbo S.A :: Supervisor") para extraer la empresa pura
+            nombre_empresa_pura = detalles_huesped.cargo.split(" :: ")[0] if " :: " in detalles_huesped.cargo else detalles_huesped.cargo
+            
+            # Buscamos la empresa en la BD por su nombre real o por el RFC ingresado
+            empresa = Empresa.query.filter(
+                (Empresa.nombre == nombre_empresa_pura) | (Empresa.rfc == detalles_huesped.rfc)
+            ).first()
+            
+            if empresa:
+                id_empresa_factura = empresa.id_empresa
+                # Buscamos su convenio comercial activo
+                convenio = Convenio.query.filter_by(empresa_id=empresa.id_empresa, activo=True).first()
+                if convenio:
+                    porcentaje_descuento = float(convenio.descuento or 0.0)
+
+        # 3. Aplicar descuento financiero estricto
+        descuento_aplicado = subtotal_hospedaje * (porcentaje_descuento / 100.0)
+        total_hospedaje_neto = subtotal_hospedaje - descuento_aplicado
+
+        # 4. Servicios Extra contratados
+        servicios_extra = Servicio.query.filter_by(reserva_id=reserva.id_reserva, facturado=False).all()
+        total_servicios = sum(float(s.costo or 0.0) for s in servicios_extra)
+
+        # 5. Estructura de Totales e Impuestos Fiscales
+        subtotal_final = total_hospedaje_neto + total_servicios
+        iva_trasladado = subtotal_final * 0.16
+        ish_local = total_hospedaje_neto * 0.03 
+        total_general_neto = subtotal_final + iva_trasladado + ish_local
+
+        # 6. Penalización Late Check-out
+        hora_limite = datetime.combine(reserva.checkout, datetime.min.time()).replace(hour=12, minute=0)
+        hora_actual = datetime.now()
+        sancion_msg = ""
+        tipo_alerta = "success"
+
+        if hora_actual > hora_limite:
+            horas_retraso = (hora_actual - hora_limite).total_seconds() / 3600
+            monto_sancion = round(horas_retraso * 200.0, 2)
+            total_general_neto += monto_sancion
+            sancion_msg = f" ¡Salida tardía! Penalización de ${monto_sancion} MXN añadida."
+            tipo_alerta = "warning"
+
+        # 7. REGISTRO DE PAGO IDEMPOTENTE: Evita el colapso por restricción Unique
+        pago_existente = Pago.query.filter_by(reserva_id=reserva.id_reserva).first()
+        monto_final_decimal = Decimal(str(round(total_general_neto, 2)))
+
+        if pago_existente:
+            # Si ya se abonó en el check-in, actualizamos el monto final con penalizaciones si las hay
+            pago_existente.monto = monto_final_decimal
+            pago_existente.fecha_pago = datetime.now()
+            pago_existente.estado_pago = "Completado" if not id_empresa_factura else "Pendiente"
+        else:
+            nuevo_pago = Pago(
+                reserva_id=reserva.id_reserva,
+                monto=monto_final_decimal,
+                metodo_pago="Por definir" if id_empresa_factura else "Tarjeta/Efectivo",
+                estado_pago="Completado" if not id_empresa_factura else "Pendiente",
+                fecha_pago=datetime.now()
+            )
+            db.session.add(nuevo_pago)
+
+        # 8. GENERACIÓN DE FACTURA IDEMPOTENTE: Evita el colapso por restricción Unique
+        factura_existente = Factura.query.filter_by(reserva_id=reserva.id_reserva).first()
+        if factura_existente:
+            factura_existente.total = monto_final_decimal
+            factura_existente.empresa_id = id_empresa_factura
+            factura_existente.estado = "Pendiente" if id_empresa_factura else "Pagada"
+            factura_existente.fecha_emision = datetime.now()
+            nueva_factura = factura_existente
+        else:
+            nueva_factura = Factura(
+                reserva_id=reserva.id_reserva,
+                empresa_id=id_empresa_factura, 
+                total=monto_final_decimal,
+                estado="Pendiente" if id_empresa_factura else "Pagada",
+                tipo_envio="DIGITAL",
+                fecha_emision=datetime.now(),
+                generado_por_empleado=reserva.empleado_id
+            )
+            db.session.add(nueva_factura)
+            db.session.flush()
+
+        # 9. Detalles correlativos de servicios
+        for s in servicios_extra:
+            nuevo_detalle = FacturaDetalle(
+                factura_id=nueva_factura.id_factura,
+                servicio_id=s.id_servicio,
+                subtotal=s.costo
+            )
+            s.facturado = True 
+            db.session.add(nuevo_detalle)
+
+        # 10. Liberar estado de la habitación física
+        reserva.estado = 'Finalizada'
+        habitacion.estado = 'Sucia' 
+
+        db.session.commit()
+        
+        msg_convenio = f" con {porcentaje_descuento}% desc. corporativo aplicado." if porcentaje_descuento > 0 else ""
+        return jsonify({
+            'mensaje': f'Check-out completado con éxito{msg_convenio}.{sancion_msg} Factura enviada a la bandeja gerencial.',
+            'tipo_alerta': tipo_alerta
+        }), 200
+
+    except Exception as e:
+        db.session.rollback()
+        print(f"Error crítico en el proceso de check-out: {str(e)}")
+        return jsonify({'error': 'Ocurrió un error en el servidor al automatizar los totales de la salida.'}), 500
+
+@views.route('/api/limpiar', methods=['POST'])
+def api_limpiar_habitacion():
+    data = request.get_json()
+    habitacion_numero = data.get('habitacion_id')
+
+    if not habitacion_numero:
+        return jsonify({'error': 'Falta el número de habitación'}), 400
+
+    try:
+        # Buscamos la habitación por su número visual (ej. 101)
+        habitacion = Habitacion.query.filter_by(numero=habitacion_numero).first()
+        
+        if not habitacion:
+            return jsonify({'error': 'Habitación no encontrada'}), 404
+
+        if habitacion.estado.lower() != 'sucia':
+            return jsonify({'error': 'La habitación no tiene estado "Sucia"'}), 400
+
+        # Actualizamos el estado para regresarla al mercado
+        habitacion.estado = "Disponible"
+        habitacion.estado_limpieza = "Limpia"
+        
+        db.session.commit()
+
+        return jsonify({'mensaje': f'¡Habitación {habitacion_numero} limpia y lista para nuevos huéspedes!'}), 200
+
+    except Exception as e:
+        db.session.rollback()
+        print(f"Error en limpieza: {str(e)}")
+        return jsonify({'error': 'Ocurrió un error al actualizar el estado de la habitación.'}), 500
+
+@views.route('/api/reserva_rapida', methods=['POST'])
+def api_reserva_rapida():
+    data = request.get_json()
+    
+    nombre_huesped = data.get('nombre')
+    habitacion_numero = data.get('habitacion_id')
+    personas = data.get('personas', 1)
+    fecha_nacimiento_str = data.get('fechaNacimiento')
+    fecha_entrada_str = data.get('fechaEntrada')
+    fecha_salida_str = data.get('fechaSalida')
+    telefono = data.get('telefono', '')
+    email = data.get('email', '')
+    cargo = data.get('cargo', '')
+    rfc = data.get('rfc', '')
+    empresa_input = data.get('empresa', '')
+    cargo_input = data.get('cargo', '')
+    
+    cargo_final = f"{empresa_input} :: {cargo_input}" if empresa_input else cargo_input
+
+    if not nombre_huesped or not habitacion_numero or not fecha_entrada_str or not fecha_salida_str:
+        return jsonify({'error': 'Faltan campos obligatorios'}), 400
+
+    try:
+        fecha_entrada = datetime.strptime(fecha_entrada_str, '%Y-%m-%d').date()
+        fecha_salida = datetime.strptime(fecha_salida_str, '%Y-%m-%d').date()
+        fecha_nacimiento = datetime.strptime(fecha_nacimiento_str, '%Y-%m-%d').date() if fecha_nacimiento_str else None
+
+        habitacion = Habitacion.query.filter_by(numero=habitacion_numero).first()
+        if not habitacion:
+            return jsonify({'error': 'Habitación no válida'}), 400
+
+        # --- PROTECCIÓN DE FECHAS (ALGORITMO ANTI-CHOQUES) ---
+        # Verificamos si existe alguna reserva que se solape con las fechas solicitadas
+        conflicto = Reserva.query.filter(
+            Reserva.habitacion_id == habitacion.id_habitacion,
+            Reserva.estado.in_(['Activa', 'Reservada']),
+            Reserva.checkin < fecha_salida,   # La reserva existente entra antes de que el nuevo salga
+            Reserva.checkout > fecha_entrada  # La reserva existente sale después de que el nuevo entra
+        ).first()
+
+        if conflicto:
+            return jsonify({'error': 'La habitación ya está ocupada o reservada durante esas fechas.'}), 400
+
+        # 1. Crear Cliente
+        nuevo_cliente = Cliente(
+            nombre=nombre_huesped,
+            apellido="", 
+            telefono=telefono,
+            email=email,
+            tipo_cliente="Particular" if not cargo else "Ejecutivo",
+            fecha_registro=datetime.now()
+        )
+        db.session.add(nuevo_cliente)
+        db.session.flush()
+
+        # 2. Actualizar Habitación al nuevo estado
+        habitacion.estado = "Reservada"
+
+        # 3. Crear Reserva
+        nueva_reserva = Reserva(
+            cliente_id=nuevo_cliente.id_cliente,
+            habitacion_id=habitacion.id_habitacion,
+            sucursal_id=habitacion.sucursal_id,
+            fecha_reserva=date.today(),
+            checkin=fecha_entrada,
+            checkout=fecha_salida,
+            estado="Reservada", # Estado específico
+            metodo_reserva="Mostrador"
+        )
+        db.session.add(nueva_reserva)
+        db.session.flush()
+
+        # 4. Crear Detalles del Huésped
+        nuevos_detalles = DetallesHuesped(
+            reserva_id=nueva_reserva.id_reserva,
+            fecha_nacimiento=fecha_nacimiento,
+            personas=personas,
+            telefono=telefono,
+            email=email,
+            cargo=cargo,
+            rfc=rfc
+        )
+        db.session.add(nuevos_detalles)
+        
+        db.session.commit()
+        return jsonify({'mensaje': '¡Reserva rápida generada exitosamente!'}), 200
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': 'Ocurrió un error al procesar la reserva.'}), 500
+
+@views.route('/api/cancelar_reserva', methods=['POST'])
+def api_cancelar_reserva():
+    data = request.get_json()
+    habitacion_numero = data.get('habitacion_id')
+
+    if not habitacion_numero:
+        return jsonify({'error': 'Falta seleccionar la habitación'}), 400
+
+    try:
+        habitacion = Habitacion.query.filter_by(numero=habitacion_numero).first()
+        if not habitacion:
+            return jsonify({'error': 'Habitación no encontrada'}), 404
+
+        # Buscamos la reserva que esté activa o reservada en esa habitación
+        reserva = Reserva.query.filter(
+            Reserva.habitacion_id == habitacion.id_habitacion,
+            Reserva.estado.in_(['Activa', 'Reservada'])
+        ).first()
+
+        if not reserva:
+            return jsonify({'error': 'No se encontró una reserva activa para cancelar.'}), 404
+
+        # Cambiamos los estados
+        reserva.estado = 'Cancelada'
+        habitacion.estado = 'Disponible'
+        habitacion.estado_limpieza = 'Limpia' # Asumimos que no se ensució si se canceló
+
+        db.session.commit()
+        return jsonify({'mensaje': f'Reserva de {reserva.cliente.nombre} cancelada exitosamente.'}), 200
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': 'Ocurrió un error al cancelar la reserva.'}), 500
 
 
+@views.route('/api/mantenimiento', methods=['POST'])
+def api_mantenimiento():
+    data = request.get_json()
+    habitacion_numero = data.get('habitacion_id')
+
+    if not habitacion_numero:
+        return jsonify({'error': 'Falta el número de habitación'}), 400
+
+    try:
+        habitacion = Habitacion.query.filter_by(numero=habitacion_numero).first()
+        if not habitacion:
+            return jsonify({'error': 'Habitación no encontrada'}), 404
+
+        # Si está en mantenimiento, la liberamos. Si no, la enviamos a mantenimiento.
+        if habitacion.estado.lower() == 'mantenimiento':
+            habitacion.estado = 'Disponible'
+            mensaje = f'Habitación {habitacion_numero} reparada y Disponible.'
+        else:
+            habitacion.estado = 'Mantenimiento'
+            mensaje = f'Habitación {habitacion_numero} enviada a Mantenimiento.'
+
+        db.session.commit()
+        return jsonify({'mensaje': mensaje}), 200
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': 'Ocurrió un error al actualizar el mantenimiento.'}), 500
+
+# ==========================================
+# ENDPOINTS PARA GESTIÓN GERENCIAL
+# ==========================================
+
+# --- OBTENER TODOS LOS CONVENIOS ---
+@views.route('/api/convenios', methods=['GET'])
+def api_get_convenios():
+    try:
+        # Hacemos un JOIN con Empresa para poder leer el nombre de la empresa
+        convenios_db = Convenio.query.join(Empresa).all()
+        resultado = []
+        
+        for conv in convenios_db:
+            # Damos formato a los datos para que encajen con lo que espera React
+            estado_str = "Activo" if conv.activo else "Inactivo"
+            descuento_fmt = f"{int(conv.descuento)}%" if conv.descuento else "0%"
+            
+            resultado.append({
+                "id": conv.id_convenio,
+                "empresa": conv.empresa.nombre,
+                "descuento": descuento_fmt,
+                "terminos": conv.terminos,
+                "estado": estado_str
+            })
+            
+        return jsonify(resultado), 200
+        
+    except Exception as e:
+        print(f"Error al obtener convenios: {str(e)}")
+        return jsonify({'error': 'Error interno del servidor al cargar convenios'}), 500
+
+
+# --- CREAR UN NUEVO CONVENIO ---
+@views.route('/api/convenios', methods=['POST'])
+def api_crear_convenio():
+    data = request.get_json()
+    
+    nombre_empresa = data.get('empresa')
+    descuento_str = data.get('descuento') # Viene de React como un string
+    terminos = data.get('terminos')
+
+    if not nombre_empresa or not descuento_str or not terminos:
+        return jsonify({'error': 'Todos los campos son obligatorios'}), 400
+
+    try:
+        # Limpiamos el símbolo de porcentaje si viene incluido para guardarlo como DECIMAL
+        descuento_val = float(str(descuento_str).replace('%', '').strip())
+
+        # 1. Buscamos si la empresa ya existe en la BD
+        empresa = Empresa.query.filter_by(nombre=nombre_empresa).first()
+        
+        # Si no existe, la creamos al vuelo generando un RFC único temporal
+        if not empresa:
+            # Generamos un identificador único corto (Ej: INV-A1B2C3D4) para no romper el 'unique=True'
+            short_id = str(uuid.uuid4())[:8].upper()
+            empresa = Empresa(
+                nombre=nombre_empresa,
+                rfc=f"INV-{short_id}",
+                telefono="No registrado",
+                email="No registrado",
+                estado="Activo"
+            )
+            db.session.add(empresa)
+            db.session.flush() # Asigna el id_empresa temporalmente
+
+        # 2. Creamos el nuevo Convenio
+        nuevo_convenio = Convenio(
+            empresa_id=empresa.id_empresa,
+            terminos=terminos,
+            descuento=descuento_val,
+            fecha_inicio=date.today(),
+            fecha_fin=date.today().replace(year=date.today().year + 1), # Vigencia de 1 año por defecto
+            activo=True
+        )
+        
+        db.session.add(nuevo_convenio)
+        db.session.commit()
+
+        return jsonify({'mensaje': f'Convenio con {nombre_empresa} creado exitosamente.'}), 201
+
+    except Exception as e:
+        db.session.rollback()
+        print(f"Error al crear convenio: {str(e)}")
+        return jsonify({'error': 'Ocurrió un error al guardar el convenio en el servidor.'}), 500
+    
+# --- ACTUALIZAR UN CONVENIO (EDITAR O CAMBIAR ESTADO) ---
+@views.route('/api/convenios/<int:id_convenio>', methods=['PUT'])
+def api_actualizar_convenio(id_convenio):
+    data = request.get_json()
+    
+    try:
+        convenio = Convenio.query.get(id_convenio)
+        if not convenio:
+            return jsonify({'error': 'Convenio no encontrado'}), 404
+        
+        if 'empresa' in data and convenio.empresa:
+            convenio.empresa.nombre = data['empresa']
+            
+        # Si se envía un nuevo descuento, lo actualizamos
+        if 'descuento' in data:
+            convenio.descuento = float(str(data['descuento']).replace('%', '').strip())
+            
+        # Si se envían nuevos términos, los actualizamos
+        if 'terminos' in data:
+            convenio.terminos = data['terminos']
+            
+        # Si se envía un cambio de estado, lo actualizamos
+        if 'estado' in data:
+            convenio.activo = True if data['estado'] == 'Activo' else False
+            
+        db.session.commit()
+        return jsonify({'mensaje': 'Convenio actualizado correctamente.'}), 200
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': 'Error al actualizar el convenio.'}), 500
+
+
+# --- ELIMINAR UN CONVENIO ---
+@views.route('/api/convenios/<int:id_convenio>', methods=['DELETE'])
+def api_eliminar_convenio(id_convenio):
+    try:
+        convenio = Convenio.query.get(id_convenio)
+        if not convenio:
+            return jsonify({'error': 'Convenio no encontrado'}), 404
+            
+        db.session.delete(convenio)
+        db.session.commit()
+        
+        return jsonify({'mensaje': 'Convenio eliminado de forma permanente.'}), 200
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': 'No se pudo eliminar el convenio por dependencias en el sistema.'}), 500
+
+# --- OBTENER REPRESENTANTES CORPORATIVOS ---
+@views.route('/api/representantes', methods=['GET'])
+def api_get_representantes():
+    try:
+        # Buscamos las reservas activas o finalizadas de clientes catalogados como Ejecutivos
+        reservas = Reserva.query.join(Cliente).filter(Cliente.tipo_cliente == 'Ejecutivo').all()
+        resultado = []
+        
+        for res in reservas:
+            detalles = res.detalles_huesped
+            
+            # Formateamos los datos para la tabla en React
+            resultado.append({
+                "id": res.id_reserva,
+                "nombre": f"{res.cliente.nombre} {res.cliente.apellido}".strip(),
+                "empresa": detalles.cargo.split(" :: ")[0] if (detalles and detalles.cargo and " :: " in detalles.cargo) else (detalles.cargo if detalles else "Particular"),
+                "habitacion": f"Hab. {res.habitacion.numero} ({res.habitacion.tipo})" if res.habitacion else "N/A",
+                "estadia": f"{res.checkin.strftime('%d %b')} - {res.checkout.strftime('%d %b')}" if res.checkin and res.checkout else "N/A"
+            })
+            
+        return jsonify(resultado), 200
+        
+    except Exception as e:
+        print(f"Error al obtener representantes: {str(e)}")
+        return jsonify({'error': 'Error interno del servidor al cargar representantes'}), 500
+
+# --- ENVIAR Y MARCAR FACTURA COMO PAGADA ---
+@views.route('/api/enviar_factura', methods=['POST'])
+def api_enviar_factura():
+    data = request.get_json()
+    factura_id = data.get('id_real')
+    
+    if not factura_id:
+        return jsonify({'error': 'Falta el identificador de la factura'}), 400
+        
+    try:
+        factura = Factura.query.get(factura_id)
+        if not factura:
+            return jsonify({'error': 'Factura no encontrada en el sistema'}), 404
+            
+        # Actualizamos el estado para indicar que fue procesada/pagada
+        factura.estado = 'Pagada' 
+        db.session.commit()
+        
+        empresa_destino = factura.empresa.nombre if factura.empresa else "el cliente"
+        return jsonify({'mensaje': f'Factura enviada exitosamente a {empresa_destino}.'}), 200
+        
+    except Exception as e:
+        db.session.rollback()
+        print(f"Error al enviar factura: {str(e)}")
+        return jsonify({'error': 'Ocurrió un error al procesar el envío de la factura.'}), 500
+
+# =======================================================
+# ENDPOINT GERENCIAL: HISTORIAL DE FACTURACIÓN CORREGIDO
+# =======================================================
+@views.route('/api/facturas_gerencia', methods=['GET'])
+def obtener_facturas_gerencia():
+    try:
+        facturas = Factura.query.all()
+        lista_facturas = []
+
+        for f in facturas:
+            reserva = f.reserva 
+            if not reserva:
+                continue
+                
+            cliente = reserva.cliente
+            detalles_huesped = reserva.detalles_huesped
+            
+            # Buscar si el cliente tiene un convenio corporativo asignado a través de su empresa
+            descuento_corp = 0.0
+            nombre_convenio = "Ninguno"
+            if f.empresa and f.empresa.convenios:
+                convenio_activo = next((c for c in f.empresa.convenios if c.activo), None)
+                if convenio_activo:
+                    descuento_corp = float(convenio_activo.descuento or 0.0)
+                    nombre_convenio = f"Convenio {f.empresa.nombre}"
+
+            # 1. Calcular conceptos de Hospedaje (Noches de estadía)
+            fecha_in = reserva.checkin or date.today()
+            fecha_out = reserva.checkout or date.today()
+            noches = (fecha_out - fecha_in).days
+            if noches <= 0:
+                noches = 1
+                
+            precio_noche = float(reserva.habitacion.precio_noche if reserva.habitacion else 0.0)
+            subtotal_hospedaje = precio_noche * noches
+            descuento_habitacion = subtotal_hospedaje * (descuento_corp / 100.0)
+            importe_hospedaje = subtotal_hospedaje - descuento_habitacion
+
+            # Nomenclatura de folios unificados
+            codigo_fecha = fecha_in.strftime('%y%m') if fecha_in else "0000"
+            codigo_hex = f"{reserva.id_reserva:04X}"
+            folio_interno_profesional = f"VL-{codigo_fecha}-{codigo_hex}"
+
+            conceptos_desglosados = [
+                {
+                    "descripcion": f"Hospedaje - Habitación {reserva.habitacion.numero if reserva.habitacion else ''} ({noches} Noches)",
+                    "cantidad": 1,
+                    "precio_unitario": round(subtotal_hospedaje, 2),
+                    "descuento": round(descuento_habitacion, 2),
+                    "importe": round(importe_hospedaje, 2)
+                }
+            ]
+
+            # 2. Calcular Servicios Extra
+            servicios_extra = reserva.servicios or []
+            subtotal_servicios = 0.0
+            
+            for s in servicios_extra:
+                monto_s = float(s.costo or 0.0)
+                subtotal_servicios += monto_s
+                conceptos_desglosados.append({
+                    "descripcion": f"Servicio Extra - {s.descripcion or 'Consumo General'}",
+                    "cantidad": 1,
+                    "precio_unitario": round(monto_s, 2),
+                    "descuento": 0.0,
+                    "importe": round(monto_s, 2)
+                })
+
+            # 3. Impuestos y Totales
+            subtotal_general = subtotal_hospedaje + subtotal_servicios
+            total_descuento_aplicado = descuento_habitacion
+            
+            base_iva = importe_hospedaje + subtotal_servicios
+            iva = base_iva * 0.16
+            ish = importe_hospedaje * 0.03
+            
+            total_neto = base_iva + iva + ish
+
+            lista_facturas.append({
+                "factura_id": f.id_factura,
+                "folio_interno": folio_interno_profesional,
+                "uuid": f"f47ac10b-58cc-4372-a567-0e02b2c3d4{f.id_factura:02d}",
+                "fecha_emision": f.fecha_emision.strftime("%Y-%m-%dT%H:%M:%S") if f.fecha_emision else datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
+                "emisor": {
+                    "razon_social": "Hotel Villa Lince S.A. de C.V.",
+                    "rfc": "HVL260311LN8",
+                    "regimen_fiscal": "601 - General de Ley Personas Morales"
+                },
+                "receptor": {
+                    "nombre_razon_social": f.empresa.nombre if f.empresa else (f"{cliente.nombre} {cliente.apellido}".strip() if cliente else "Huésped General"),
+                    "rfc": f.empresa.rfc if f.empresa else (detalles_huesped.rfc if detalles_huesped else 'XAXX010101000'),
+                    "convenio_aplicado": nombre_convenio, # <-- CORREGIDO: Asignación limpia sin operador de asignación inválido
+                    "descuento_porcentaje": descuento_corp
+                },
+                "conceptos": conceptos_desglosados,
+                "impuestos": {
+                    "iva_porcentaje": 16.0,
+                    "iva_total": round(iva, 2),
+                    "ish_porcentaje": 3.0,
+                    "ish_total": round(ish, 2)
+                },
+                "totales": {
+                    "subtotal": round(subtotal_general, 2),
+                    "total_descuento": round(total_descuento_aplicado, 2),
+                    "total_neto": round(total_neto, 2)
+                },
+                "estado_pago": f.estado or "Pendiente"
+            })
+
+        return jsonify(lista_facturas), 200
+
+    except Exception as e:
+        print(f"Error en facturas_gerencia: {str(e)}")
+        return jsonify({"error": "Error interno al procesar facturas", "detalles": str(e)}), 500
+
+TERMINAL_CACHE = {}
+
+@views.route('/api/pagos/procesar_inmediato', methods=['POST'])
+def procesar_pago_inmediato():
+    """ Procesa Efectivo y Tarjeta Local de forma atómica y persistente """
+    data = request.get_json()
+    metodo_pago = data.get('metodo_pago')
+    monto_total = data.get('monto_total')
+    datos_reserva = data.get('datos_reserva') 
+
+    if not datos_reserva or not datos_reserva.get('nombre') or not datos_reserva.get('habitacion_id'):
+        return jsonify({'error': 'Faltan datos mandatorios de la reserva'}), 400
+
+    try:
+        # 1. ACTUALIZAR HABITACIÓN: Localizar por el número visual (Ej: 107)
+        habitacion_numero = datos_reserva['habitacion_id']
+        habitacion = Habitacion.query.filter_by(numero=habitacion_numero).first()
+        
+        if not habitacion:
+            return jsonify({'error': f'La habitación {habitacion_numero} no existe.'}), 404
+            
+        if habitacion.estado.lower() != 'disponible':
+            return jsonify({'error': f'La habitación {habitacion_numero} ya no está disponible.'}), 400
+            
+        # Modificamos el estado en memoria antes del Commit unificado
+        habitacion.estado = 'Ocupada'
+
+        # 2. CREAR CLIENTE: Identificar si es corporativo para asignar el rol de negocio
+        empresa_input = datos_reserva.get('empresa', '')
+        tipo_cliente_final = "Ejecutivo" if empresa_input else "Particular"
+        
+        nuevo_cliente = Cliente(
+            nombre=datos_reserva['nombre'],
+            apellido="", 
+            telefono=datos_reserva.get('telefono', ''),
+            email=datos_reserva.get('email', ''),
+            tipo_cliente=tipo_cliente_final,
+            fecha_registro=datetime.now()
+        )
+        db.session.add(nuevo_cliente)
+        db.session.flush()  # Genera el id_cliente para la llave foránea de la reserva
+
+        # 3. CREAR RESERVA: Parseo estricto de las fechas provenientes del Wizard
+        fecha_entrada = datetime.strptime(datos_reserva['fechaEntrada'], '%Y-%m-%d').date()
+        fecha_salida = datetime.strptime(datos_reserva['fechaSalida'], '%Y-%m-%d').date()
+        
+        nueva_reserva = Reserva(
+            cliente_id=nuevo_cliente.id_cliente,
+            habitacion_id=habitacion.id_habitacion,
+            sucursal_id=habitacion.sucursal_id,
+            fecha_reserva=date.today(),
+            checkin=fecha_entrada,
+            checkout=fecha_salida,
+            estado="Activa",
+            metodo_reserva="Mostrador"
+        )
+        db.session.add(nueva_reserva)
+        db.session.flush()  # Genera el id_reserva para el registro del Pago
+
+        # 4. CREAR PAGO DEFINITIVO
+        nuevo_pago = Pago(
+            reserva_id=nueva_reserva.id_reserva,
+            monto=Decimal(str(monto_total)),
+            metodo_pago=metodo_pago,
+            estado_pago="Completado",
+            fecha_pago=datetime.now()
+        )
+        db.session.add(nuevo_pago)
+
+        # 5. CREAR DETALLES VINCULADOS DEL HUÉSPED
+        fecha_nac_str = datos_reserva.get('fechaNacimiento')
+        fecha_nacimiento = datetime.strptime(fecha_nac_str, '%Y-%m-%d').date() if fecha_nac_str else None
+        
+        cargo_input = datos_reserva.get('cargo', '')
+        cargo_final = f"{empresa_input} :: {cargo_input}" if empresa_input else cargo_input
+
+        nuevos_detalles = DetallesHuesped(
+            reserva_id=nueva_reserva.id_reserva,
+            fecha_nacimiento=fecha_nacimiento,
+            personas=int(datos_reserva.get('personas', 1)),
+            telefono=datos_reserva.get('telefono', ''),
+            email=datos_reserva.get('email', ''),
+            cargo=cargo_final,
+            rfc=datos_reserva.get('rfc', '')
+        )
+        db.session.add(nuevos_detalles)
+
+        # COMMIT GLOBAL: Guarda de manera definitiva y atómica en MySQL
+        db.session.commit()
+        return jsonify({'mensaje': 'Check-In y Pago grabados permanentemente en la base de datos.'}), 200
+
+    except Exception as e:
+        db.session.rollback()  # Garantiza la integridad ACID si algo falla
+        print(f" Error crítico en procesar_pago_inmediato: {str(e)}")
+        return jsonify({'error': f'Error interno de persistencia: {str(e)}'}), 500
+
+
+@views.route('/api/terminal/solicitar', methods=['POST'])
+def terminal_solicitar():
+    """ Inicia una solicitud de cobro en la Terminal Física """
+    data = request.get_json()
+    
+    tx_id = str(uuid.uuid4())
+    TERMINAL_CACHE[tx_id] = {
+        'monto': data.get('monto_total'),
+        'estado': 'PENDIENTE',
+        'datos_reserva': data.get('datos_reserva'),
+        'timestamp': time.time()
+    }
+    
+    return jsonify({'tx_id': tx_id, 'mensaje': 'Esperando a la terminal...'}), 200
+
+@views.route('/api/terminal/estado/<tx_id>', methods=['GET'])
+def terminal_estado(tx_id):
+    """ Polling para el frontend web: Consulta el estado del cobro """
+    tx = TERMINAL_CACHE.get(tx_id)
+    if not tx:
+        return jsonify({'error': 'Transacción expirada o inexistente'}), 404
+    
+    return jsonify({'estado': tx['estado']}), 200
+
+def no_cumple_requisitos(datos):
+    return not datos or not datos.get('nombre') or not datos.get('habitacion_id')
+
+@views.route('/api/terminal/pendiente', methods=['GET'])
+def obtener_terminal_pendiente():
+    """ Endpoint para la App Móvil: Descubre si hay algún cobro en fila """
+    for tx_id, transaccion in TERMINAL_CACHE.items():
+        if transaccion['estado'] == 'PENDIENTE':
+            return jsonify({
+                'tx_id': tx_id,
+                'monto': float(transaccion['monto'])
+              }), 200
+    return jsonify({'mensaje': 'No hay cobros pendientes por el momento'}), 204
+
+
+@views.route('/api/terminal/callback', methods=['POST'])
+def terminal_callback():
+    """ Callback seguro: Recibe la aprobación del smartphone y guarda en la BD """
+    data = request.get_json()
+    tx_id = data.get('tx_id')
+    nuevo_estado = data.get('estado') # 'APROBADO' o 'RECHAZADO'
+
+    if tx_id not in TERMINAL_CACHE:
+        return jsonify({'error': 'La transacción no existe o expiró del caché'}), 404
+
+    transaccion = TERMINAL_CACHE[tx_id]
+
+    if nuevo_estado == 'RECHAZADO':
+        transaccion['estado'] = 'RECHAZADO'
+        return jsonify({'mensaje': 'Estado de rechazo actualizado'}), 200
+
+    if nuevo_estado == 'APROBADO':
+        datos_reserva = transaccion['datos_reserva']
+        monto_total = transaccion['monto']
+
+        try:
+            # PROCESAMIENTO DE PERSISTENCIA ATÓMICA EN MYSQL
+            habitacion_numero = datos_reserva['habitacion_id']
+            habitacion = Habitacion.query.filter_by(numero=habitacion_numero).first()
+            
+            if not habitacion or habitacion.estado.lower() != 'disponible':
+                transaccion['estado'] = 'RECHAZADO'
+                return jsonify({'error': 'La habitación ya no está disponible'}), 400
+
+            habitacion.estado = 'Ocupada'
+
+            # Crear Cliente
+            nuevo_cliente = Cliente(
+                nombre=datos_reserva['nombre'], apellido="",
+                telefono=datos_reserva.get('telefono', ''), email=datos_reserva.get('email', ''),
+                tipo_cliente="Ejecutivo" if datos_reserva.get('convenio_id') else "Particular",
+                fecha_registro=datetime.now()
+            )
+            db.session.add(nuevo_cliente)
+            db.session.flush()
+
+            # Crear Reserva
+            nueva_reserva = Reserva(
+                cliente_id=nuevo_cliente.id_cliente,
+                habitacion_id=habitacion.id_habitacion,
+                sucursal_id=habitacion.sucursal_id,
+                fecha_reserva=date.today(),
+                checkin=datetime.strptime(datos_reserva['fechaEntrada'], '%Y-%m-%d').date(),
+                checkout=datetime.strptime(datos_reserva['fechaSalida'], '%Y-%m-%d').date(),
+                estado="Activa", metodo_reserva="Mostrador"
+            )
+            db.session.add(nueva_reserva)
+            db.session.flush()
+
+            # Crear renglón del Pago Autorizado por la Terminal
+            porcentaje_comision = datos_reserva.get('comisionPercent', '0')
+            metodo_etiqueta = f"Terminal POS (Bancaria (+{porcentaje_comision}% vPOS))"
+            
+            nuevo_pago = Pago(
+                reserva_id=nueva_reserva.id_reserva,
+                monto=Decimal(str(monto_total)),
+                metodo_pago=metodo_etiqueta,
+                estado_pago="Completado",
+                fecha_pago=datetime.now()
+            )
+            db.session.add(nuevo_pago)
+
+            # Crear Detalles del Huésped
+            nuevos_detalles = DetallesHuesped(
+                reserva_id=nueva_reserva.id_reserva,
+                personas=int(datos_reserva.get('personas', 1)),
+                telefono=datos_reserva.get('telefono', ''),
+                email=datos_reserva.get('email', ''),
+                cargo=datos_reserva.get('cargo', ''),
+                rfc=datos_reserva.get('rfc', '')
+            )
+            db.session.add(nuevos_detalles)
+
+            # CONFIRMACIÓN UNIFICADA EN MYSQL
+            db.session.commit()
+            
+            # Cambiamos el estado en el Caché para liberar el bucle useEffect del Frontend
+            transaccion['estado'] = 'APROBADO'
+            return jsonify({'status': 'SUCCESS', 'mensaje': 'Check-In integrado guardado'}), 200
+
+        except Exception as e:
+            db.session.rollback()
+            transaccion['estado'] = 'RECHAZADO'
+            return jsonify({'error': f'Colapso transaccional: {str(e)}'}), 500
+
+@views.route('/api/terminal/cancelar/<tx_id>', methods=['POST'])
+def terminal_cancelar(tx_id):
+    """ Cancela la orden de cobro activa desde el mostrador web """
+    if tx_id in TERMINAL_CACHE:
+        TERMINAL_CACHE[tx_id]['estado'] = 'RECHAZADO'
+        return jsonify({'mensaje': 'Transacción abortada por el cajero'}), 200
+    return jsonify({'error': 'No se encontró la transacción de origen'}), 404

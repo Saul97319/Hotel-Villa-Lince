@@ -132,6 +132,7 @@ class Reserva(Base):
     pago = relationship("Pago", uselist=False, back_populates="reserva")
     servicios = relationship("Servicio", back_populates="reserva")
     factura = relationship("Factura", uselist=False, back_populates="reserva")
+    detalles_huesped = relationship("DetallesHuesped", uselist=False, back_populates="reserva")
 
 class Pago(Base):
     __tablename__ = 'pago'

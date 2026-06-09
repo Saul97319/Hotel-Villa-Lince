@@ -2,6 +2,7 @@ from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import Column, Integer, String, Date, Text, ForeignKey, DateTime, Boolean, DECIMAL
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
+import uuid
 
 db = SQLAlchemy()
 
@@ -97,6 +98,20 @@ class HuespedEmpresarial(db.Model):
 
     empresa = relationship("Empresa", back_populates="huespedes")
 
+class DetallesHuesped(db.Model):
+    __tablename__ = 'detalles_huesped'
+
+    id_detalle = Column(Integer, primary_key=True, autoincrement=True)
+    reserva_id = Column(Integer, ForeignKey('reserva.id_reserva'), unique=True)
+    fecha_nacimiento = Column(Date)
+    personas = Column(Integer)
+    telefono = Column(String(20))
+    email = Column(String(150))
+    cargo = Column(String(150))
+    rfc = Column(String(20))
+
+    reserva = relationship("Reserva", back_populates="detalles_huesped")
+
 class Habitacion(db.Model):
     __tablename__ = 'habitacion'
 
@@ -132,6 +147,7 @@ class Reserva(db.Model):
     pago = relationship("Pago", uselist=False, back_populates="reserva")
     servicios = relationship("Servicio", back_populates="reserva")
     factura = relationship("Factura", uselist=False, back_populates="reserva")
+    detalles_huesped = relationship("DetallesHuesped", uselist=False, back_populates="reserva")
 
 class Pago(db.Model):
     __tablename__ = 'pago'

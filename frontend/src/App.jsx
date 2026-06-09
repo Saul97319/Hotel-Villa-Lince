@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { Eye, EyeOff, Lock, Mail, Key, ShieldCheck, Building2, LogOut, UserCircle } from 'lucide-react';
+import MostradorApp from './MostradorApp'; 
+import GestionGerencialApp from './GestionGerencialApp';
+import AdminApp from './AdminApp';
 
 export default function App() {
-  // Estado para manejar la vista actual (login o el dashboard de algún rol)
   const [currentView, setCurrentView] = useState('login');
   const [userRole, setUserRole] = useState(null);
-
-  // Vistas disponibles: 'login', 'admin', 'gerente', 'empleado'
 
   const handleLogin = (role) => {
     setUserRole(role);
@@ -16,13 +16,24 @@ export default function App() {
   const handleLogout = () => {
     setUserRole(null);
     setCurrentView('login');
+    localStorage.removeItem('token'); // Limpiamos la sesión
   };
+
+  if (currentView === 'empleado' || currentView === 'recepcionista') {
+    return <MostradorApp onLogout={handleLogout} />;
+  }
+
+  if (currentView === 'gerente') {
+    return <GestionGerencialApp onLogout={handleLogout} />;
+  }
+
+  if (currentView === 'admin') {
+    return <AdminApp onLogout={handleLogout} />;
+  }
 
   return (
     <div className="w-full min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-indigo-900 flex items-center justify-center p-4 font-sans text-slate-100 overflow-x-hidden relative">
       
-      {/* Elementos de fondo animados para darle vida a la pantalla */}
-      {/* CAMBIO: Usamos "fixed inset-0" para que sea imposible que estiren la página */}
       <div className="fixed inset-0 overflow-hidden z-0 pointer-events-none">
         <div className="absolute top-[-10%] left-[-10%] w-96 h-96 bg-blue-500 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-pulse"></div>
         <div className="absolute bottom-[-10%] right-[-10%] w-96 h-96 bg-amber-500 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-pulse" style={{ animationDelay: '2s' }}></div>
@@ -30,15 +41,6 @@ export default function App() {
 
       <div className="z-10 w-full max-w-md">
         {currentView === 'login' && <LoginForm onLogin={handleLogin} />}
-        
-        {currentView === 'admin' && (
-          <DashboardPlaceholder 
-            role="Administrador" 
-            title="Panel de Administración y Reportes" 
-            onLogout={handleLogout} 
-            color="bg-purple-600"
-          />
-        )}
         
         {currentView === 'gerente' && (
           <DashboardPlaceholder 
@@ -48,20 +50,11 @@ export default function App() {
             color="bg-emerald-600"
           />
         )}
-        
-        {currentView === 'empleado' && (
-          <DashboardPlaceholder 
-            role="Empleado de Mostrador" 
-            title="Gestión de Mostrador (Check-in/Check-out)" 
-            onLogout={handleLogout}
-            color="bg-amber-600"
-          />
-        )}
       </div>
     </div>
   );
 }
-
+       
 // ==========================================
 // COMPONENTE DE LOGIN
 // ==========================================

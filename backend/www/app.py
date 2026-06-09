@@ -13,9 +13,10 @@ app.secret_key = 'your_secret_key'
 
 db.init_app(app)
 
+with app.app_context():
+        db.create_all()
+
 app.register_blueprint(views, url_prefix='/')
 
 if __name__ == '__main__':
-    with app.app_context():
-        db.create_all()
     app.run(host='0.0.0.0', port=5000)
