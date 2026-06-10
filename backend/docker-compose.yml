@@ -26,6 +26,7 @@ services:
             - db
         networks:
             - default
+        restart: on-failure
             
     phpmyadmin:
         image: phpmyadmin/phpmyadmin
