@@ -2,7 +2,5 @@
 .env.*
 !.env.example
 *.log
-/dump/*
-!/dump/.gitkeep
 .DS_Store
 !/www/.gitkeep
