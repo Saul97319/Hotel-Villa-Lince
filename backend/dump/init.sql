@@ -849,3 +849,40 @@ COMMIT;
 /*!40101 SET CHARACTER_SET_CLIENT=@OLD_CHARACTER_SET_CLIENT */;
 /*!40101 SET CHARACTER_SET_RESULTS=@OLD_CHARACTER_SET_RESULTS */;
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
+/* facturas simulacion */
+
+INSERT INTO `cliente` (`id_cliente`, `nombre`, `apellido`, `telefono`, `email`, `tipo_cliente`, `fecha_registro`) VALUES
+(32, 'Enrique Peña Nieto', '', '555 0000 555', 'Morena@bienestar.com', 'Ejecutivo', '2026-06-15 12:00:00');
+
+INSERT INTO `reserva` (`id_reserva`, `cliente_id`, `habitacion_id`, `empleado_id`, `sucursal_id`, `fecha_reserva`, `checkin`, `checkout`, `estado`, `metodo_reserva`) VALUES
+(31, 32, 150, 5, 1, '2026-06-15', '2026-06-15', '2026-06-18', 'Finalizada', 'Mostrador');
+
+INSERT INTO `detalles_huesped` (`id_detalle`, `reserva_id`, `fecha_nacimiento`, `personas`, `telefono`, `email`, `cargo`, `rfc`) VALUES
+(25, 31, '1966-07-20', 2, '555 0000 555', 'Morena@bienestar.com', 'Gobernador', 'PEEN660720HJC');
+
+INSERT INTO `pago` (`id_pago`, `reserva_id`, `monto`, `metodo_pago`, `estado_pago`, `fecha_pago`) VALUES
+(22, 31, 10920.00, 'Tarjeta (Bancaria - 0236)', 'Completado', '2026-06-18 11:30:00');
+
+
+INSERT INTO `factura` (`id_factura`, `reserva_id`, `empresa_id`, `total`, `estado`, `tipo_envio`, `fecha_emision`, `generado_por_empleado`) VALUES
+(12, 31, NULL, 12495.00, 'Pagada', 'DIGITAL', '2026-06-18 11:35:00', 5);
+
+
+
+INSERT INTO `factura` (`id_factura`, `reserva_id`, `empresa_id`, `total`, `estado`, `tipo_envio`, `fecha_emision`, `generado_por_empleado`) VALUES
+(13, 22, 9, 2400.00, 'Pendiente', 'DIGITAL', '2026-06-09 02:25:00', 1);
+
+
+
+INSERT INTO `factura` (`id_factura`, `reserva_id`, `empresa_id`, `total`, `estado`, `tipo_envio`, `fecha_emision`, `generado_por_empleado`) VALUES
+(14, 24, NULL, 10500.00, 'Pagada', 'DIGITAL', '2026-06-09 02:40:00', 1);
+
+
+
+-- 4) AUTO_INCREMENT actualizado para que el sistema siga generando IDs correctamente
+
+ALTER TABLE `cliente` MODIFY `id_cliente` int NOT NULL AUTO_INCREMENT, AUTO_INCREMENT = 33;
+ALTER TABLE `reserva` MODIFY `id_reserva` int NOT NULL AUTO_INCREMENT, AUTO_INCREMENT = 32;
+ALTER TABLE `detalles_huesped` MODIFY `id_detalle` int NOT NULL AUTO_INCREMENT, AUTO_INCREMENT = 26;
+ALTER TABLE `pago` MODIFY `id_pago` int NOT NULL AUTO_INCREMENT, AUTO_INCREMENT = 23;
+ALTER TABLE `factura` MODIFY `id_factura` int NOT NULL AUTO_INCREMENT, AUTO_INCREMENT = 15;
