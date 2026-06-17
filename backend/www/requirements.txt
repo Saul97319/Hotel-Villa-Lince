@@ -10,6 +10,6 @@ pycryptodome==3.19.0
 qrcode
 Pillow==10.3.0
 Flask-CORS
-
+reportlab
 
 

@@ -6,7 +6,7 @@ import jwt, base64, hashlib, datetime, re, decimal
 import datetime, re
 import uuid
 from functools import wraps
-from flask import request, redirect, url_for, flash
+from flask import request, redirect, url_for, flash, send_file
 from datetime import date, datetime, timedelta
 from flask import make_response
 from sqlalchemy.orm import joinedload
@@ -21,6 +21,15 @@ from flask import jsonify, request
 import uuid
 import time
 from decimal import Decimal
+
+from reportlab.lib.pagesizes import letter
+from reportlab.lib import colors
+from reportlab.lib.units import cm
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, HRFlowable
+from reportlab.lib.styles import ParagraphStyle
+from reportlab.lib.enums import TA_RIGHT, TA_CENTER
+from io import BytesIO
+
 
 views = Blueprint('views', __name__)
 
@@ -2372,3 +2381,234 @@ def terminal_cancelar(tx_id):
         TERMINAL_CACHE[tx_id]['estado'] = 'RECHAZADO'
         return jsonify({'mensaje': 'Transacción abortada por el cajero'}), 200
     return jsonify({'error': 'No se encontró la transacción de origen'}), 404
+
+#facturas_gerencia
+@views.route('/api/factura_pdf/<int:factura_id>', methods=['GET'])
+def descargar_factura_pdf(factura_id):
+    """Genera y descarga el PDF de una factura específica usando ReportLab."""
+    try:
+        factura = Factura.query.get(factura_id)
+        if not factura:
+            return jsonify({'error': 'Factura no encontrada'}), 404
+
+        reserva = factura.reserva
+        if not reserva:
+            return jsonify({'error': 'La factura no tiene reserva asociada'}), 404
+
+        cliente = reserva.cliente
+        detalles = reserva.detalles_huesped
+
+        # Datos del receptor
+        if factura.empresa:
+            receptor_nombre = factura.empresa.nombre
+            receptor_rfc = factura.empresa.rfc
+            convenio_txt = f"Convenio {factura.empresa.nombre}"
+            descuento_pct = 0.0
+            conv = Convenio.query.filter_by(empresa_id=factura.empresa.id_empresa, activo=True).first()
+            if conv:
+                descuento_pct = float(conv.descuento or 0.0)
+        else:
+            receptor_nombre = f"{cliente.nombre} {cliente.apellido}".strip() if cliente else "Huésped General"
+            receptor_rfc = detalles.rfc if detalles and detalles.rfc else "XAXX010101000"
+            convenio_txt = "Ninguno"
+            descuento_pct = 0.0
+
+        # Cálculos financieros
+        fecha_in = reserva.checkin or date.today()
+        fecha_out = reserva.checkout or date.today()
+        noches = (fecha_out - fecha_in).days
+        if noches <= 0:
+            noches = 1
+
+        precio_noche = float(reserva.habitacion.precio_noche if reserva.habitacion else 0)
+        subtotal_hospedaje = precio_noche * noches
+        descuento_hab = subtotal_hospedaje * (descuento_pct / 100)
+        importe_hospedaje = subtotal_hospedaje - descuento_hab
+
+        servicios_extra = reserva.servicios or []
+        total_servicios = sum(float(s.costo or 0) for s in servicios_extra)
+
+        base_iva = importe_hospedaje + total_servicios
+        iva = base_iva * 0.16
+        ish = importe_hospedaje * 0.03
+        total_neto = base_iva + iva + ish
+
+        codigo_fecha = fecha_in.strftime('%y%m')
+        folio = f"VL-{codigo_fecha}-{reserva.id_reserva:04X}"
+        uuid_sim = f"f47ac10b-58cc-4372-a567-0e02b2c3d4{factura_id:02d}"
+
+        # Construir PDF en memoria
+        buffer = BytesIO()
+        doc = SimpleDocTemplate(
+            buffer,
+            pagesize=letter,
+            rightMargin=1.8*cm, leftMargin=1.8*cm,
+            topMargin=1.5*cm, bottomMargin=1.5*cm
+        )
+
+        COLOR_NAVY = colors.HexColor('#1e2d5a')
+        COLOR_INDIGO = colors.HexColor('#4f46e5')
+        COLOR_GRAY = colors.HexColor('#64748b')
+        COLOR_LIGHT = colors.HexColor('#f1f5f9')
+        COLOR_RED = colors.HexColor('#e11d48')
+
+        s_titulo = ParagraphStyle('titulo', fontSize=20, textColor=COLOR_NAVY,
+                                  fontName='Helvetica-Bold', spaceAfter=2)
+        s_sub = ParagraphStyle('sub', fontSize=8, textColor=COLOR_GRAY,
+                               fontName='Helvetica', spaceAfter=1)
+        s_label = ParagraphStyle('label', fontSize=7, textColor=COLOR_GRAY,
+                                 fontName='Helvetica-Bold')
+        s_valor = ParagraphStyle('valor', fontSize=8, textColor=COLOR_NAVY,
+                                 fontName='Helvetica')
+        s_right = ParagraphStyle('right', fontSize=8, textColor=COLOR_NAVY,
+                                 fontName='Helvetica', alignment=TA_RIGHT)
+        s_footer = ParagraphStyle('footer', fontSize=6.5, textColor=COLOR_GRAY,
+                                  fontName='Helvetica', alignment=TA_CENTER)
+        s_mono = ParagraphStyle('mono', fontSize=6.5, textColor=COLOR_GRAY,
+                                fontName='Courier', spaceAfter=2)
+
+        story = []
+
+        header_data = [[
+            [Paragraph("Hotel Villa Lince", s_titulo),
+             Paragraph("Hotel Villa Lince S.A. de C.V.", s_sub),
+             Paragraph("RFC: HVL260311LN8", s_sub),
+             Paragraph("Régimen: 601 - General de Ley Personas Morales", s_sub),
+             Paragraph("Av. Prolongación El Colli, Zapopan, Jalisco", s_sub)],
+            [Paragraph("COMPROBANTE FISCAL DIGITAL", ParagraphStyle(
+                 'cfdi', fontSize=7, textColor=COLOR_INDIGO,
+                 fontName='Helvetica-Bold', alignment=TA_RIGHT)),
+             Paragraph(folio, ParagraphStyle(
+                 'folio', fontSize=16, textColor=COLOR_INDIGO,
+                 fontName='Helvetica-Bold', alignment=TA_RIGHT)),
+             Paragraph(f"Emisión: {factura.fecha_emision.strftime('%d/%m/%Y %H:%M') if factura.fecha_emision else 'N/A'}", s_right),
+             Paragraph(f"Estado: {factura.estado or 'Pendiente'}", s_right)]
+        ]]
+        t_header = Table(header_data, colWidths=['60%', '40%'])
+        t_header.setStyle(TableStyle([
+            ('VALIGN', (0,0), (-1,-1), 'TOP'),
+            ('BOTTOMPADDING', (0,0), (-1,-1), 8),
+        ]))
+        story.append(t_header)
+        story.append(HRFlowable(width="100%", thickness=2, color=COLOR_NAVY, spaceAfter=10))
+
+        rec_data = [[
+            Paragraph("RECEPTOR DEL COMPROBANTE", ParagraphStyle(
+                'rh', fontSize=7, textColor=COLOR_INDIGO,
+                fontName='Helvetica-Bold', spaceBefore=4)),
+            '', '', ''
+        ],[
+            [Paragraph("Razón Social", s_label), Paragraph(receptor_nombre, s_valor)],
+            [Paragraph("RFC Fiscal", s_label), Paragraph(receptor_rfc, s_valor)],
+            [Paragraph("Uso CFDI", s_label), Paragraph("G03 - Gastos en general", s_valor)],
+            [Paragraph("Esquema Comercial", s_label), Paragraph(convenio_txt, s_valor)],
+        ]]
+        t_rec = Table(rec_data, colWidths=['25%','25%','25%','25%'])
+        t_rec.setStyle(TableStyle([
+            ('SPAN', (0,0), (3,0)),
+            ('BACKGROUND', (0,0), (3,0), COLOR_LIGHT),
+            ('BACKGROUND', (0,1), (3,1), colors.HexColor('#e8eaf6')),
+            ('ROWPADDING', (0,0), (-1,-1), 6),
+            ('GRID', (0,1), (-1,-1), 0.3, colors.HexColor('#e2e8f0')),
+            ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+        ]))
+        story.append(t_rec)
+        story.append(Spacer(1, 12))
+
+        col_headers = [
+            Paragraph("Descripción", ParagraphStyle('ch1', fontSize=7, textColor=colors.white, fontName='Helvetica-Bold')),
+            Paragraph("Cant.", ParagraphStyle('ch2', fontSize=7, textColor=colors.white, fontName='Helvetica-Bold', alignment=TA_CENTER)),
+            Paragraph("Precio Unit.", ParagraphStyle('ch3', fontSize=7, textColor=colors.white, fontName='Helvetica-Bold', alignment=TA_RIGHT)),
+            Paragraph("Descuento", ParagraphStyle('ch4', fontSize=7, textColor=colors.white, fontName='Helvetica-Bold', alignment=TA_RIGHT)),
+            Paragraph("Importe", ParagraphStyle('ch5', fontSize=7, textColor=colors.white, fontName='Helvetica-Bold', alignment=TA_RIGHT)),
+        ]
+
+        s_cell = ParagraphStyle('cell', fontSize=8, fontName='Helvetica', textColor=COLOR_NAVY)
+        s_cellR = ParagraphStyle('cellR', fontSize=8, fontName='Helvetica', textColor=COLOR_NAVY, alignment=TA_RIGHT)
+        s_cellRred = ParagraphStyle('cellRred', fontSize=8, fontName='Helvetica', textColor=COLOR_RED, alignment=TA_RIGHT)
+        s_cellC = ParagraphStyle('cellC', fontSize=8, fontName='Helvetica', alignment=TA_CENTER)
+
+        concepto_rows = [col_headers]
+
+        hab_num = reserva.habitacion.numero if reserva.habitacion else '?'
+        hab_tipo = reserva.habitacion.tipo if reserva.habitacion else ''
+        concepto_rows.append([
+            Paragraph(f"Hospedaje - Hab. {hab_num} ({hab_tipo}) - {noches} noche(s)", s_cell),
+            Paragraph("1", s_cellC),
+            Paragraph(f"${subtotal_hospedaje:,.2f}", s_cellR),
+            Paragraph(f"-${descuento_hab:,.2f}", s_cellRred),
+            Paragraph(f"${importe_hospedaje:,.2f}", s_cellR),
+        ])
+
+        for s in servicios_extra:
+            monto_s = float(s.costo or 0)
+            concepto_rows.append([
+                Paragraph(f"Servicio Extra - {s.descripcion or 'Consumo General'}", s_cell),
+                Paragraph("1", s_cellC),
+                Paragraph(f"${monto_s:,.2f}", s_cellR),
+                Paragraph("$0.00", s_cellR),
+                Paragraph(f"${monto_s:,.2f}", s_cellR),
+            ])
+
+        t_conceptos = Table(concepto_rows, colWidths=['44%','8%','16%','16%','16%'])
+        t_conceptos.setStyle(TableStyle([
+            ('BACKGROUND', (0,0), (-1,0), COLOR_NAVY),
+            ('TEXTCOLOR', (0,0), (-1,0), colors.white),
+            ('ROWBACKGROUNDS', (0,1), (-1,-1), [colors.white, COLOR_LIGHT]),
+            ('GRID', (0,0), (-1,-1), 0.3, colors.HexColor('#e2e8f0')),
+            ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+            ('TOPPADDING', (0,0), (-1,-1), 6),
+            ('BOTTOMPADDING', (0,0), (-1,-1), 6),
+        ]))
+        story.append(t_conceptos)
+        story.append(Spacer(1, 12))
+
+        s_tot_lbl = ParagraphStyle('tl', fontSize=8, fontName='Helvetica', textColor=COLOR_GRAY, alignment=TA_RIGHT)
+        s_tot_val = ParagraphStyle('tv', fontSize=8, fontName='Helvetica', textColor=COLOR_NAVY, alignment=TA_RIGHT)
+        s_tot_red = ParagraphStyle('tred', fontSize=8, fontName='Helvetica', textColor=COLOR_RED, alignment=TA_RIGHT)
+        s_tot_big = ParagraphStyle('tb', fontSize=11, fontName='Helvetica-Bold', textColor=COLOR_NAVY, alignment=TA_RIGHT)
+        s_tot_lbig = ParagraphStyle('tlb', fontSize=11, fontName='Helvetica-Bold', textColor=COLOR_NAVY, alignment=TA_RIGHT)
+
+        totales_data = [
+            [Paragraph("Subtotal comercial:", s_tot_lbl), Paragraph(f"${subtotal_hospedaje + total_servicios:,.2f}", s_tot_val)],
+            [Paragraph(f"Descuento corporativo ({descuento_pct:.0f}%):", s_tot_lbl), Paragraph(f"-${descuento_hab:,.2f}", s_tot_red)],
+            [Paragraph("IVA trasladado (16%):", s_tot_lbl), Paragraph(f"${iva:,.2f}", s_tot_val)],
+            [Paragraph("ISH local (3%):", s_tot_lbl), Paragraph(f"${ish:,.2f}", s_tot_val)],
+            [Paragraph("TOTAL GENERAL NETO:", s_tot_lbig), Paragraph(f"${total_neto:,.2f}", s_tot_big)],
+        ]
+        t_totales = Table(totales_data, colWidths=['75%', '25%'], hAlign='RIGHT')
+        t_totales.setStyle(TableStyle([
+            ('LINEABOVE', (0,4), (-1,4), 1.5, COLOR_NAVY),
+            ('TOPPADDING', (0,0), (-1,-1), 4),
+            ('BOTTOMPADDING', (0,0), (-1,-1), 4),
+        ]))
+        story.append(t_totales)
+        story.append(Spacer(1, 18))
+
+        story.append(HRFlowable(width="100%", thickness=0.5, color=COLOR_GRAY, spaceAfter=6))
+        story.append(Paragraph(f"UUID Fiscal (simulado): {uuid_sim}", s_mono))
+        story.append(Paragraph(
+            "Cadena original: ||1.1|" + uuid_sim + "|HVL260311LN8|mSgWq9A7bC+pX0vLkM9zY3RtWE5nN...", s_mono))
+        story.append(Spacer(1, 6))
+        story.append(Paragraph(
+            "Este documento es una representación impresa de un CFDI simulado con fines académicos. "
+            "Hotel Villa Lince S.A. de C.V. - RFC HVL260311LN8 - Zapopan, Jalisco, México.",
+            s_footer))
+
+        doc.build(story)
+        buffer.seek(0)
+
+        return send_file(
+            buffer,
+            mimetype='application/pdf',
+            as_attachment=True,
+            download_name=f"Factura_{folio}.pdf"
+        )
+
+    except Exception as e:
+        print(f"Error al generar PDF: {str(e)}")
+        return jsonify({'error': f'Error al generar el PDF: {str(e)}'}), 500
+
+
+
+

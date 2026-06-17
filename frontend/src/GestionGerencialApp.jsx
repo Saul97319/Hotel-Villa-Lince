@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Building2, Users, FileText, Plus, Send, CheckCircle2, 
-  AlertCircle, XCircle, X, Briefcase, Calendar, Hotel, LogOut, Edit, Trash2, Power 
+  AlertCircle, XCircle, X, Briefcase, Calendar, Hotel, LogOut, Edit, Trash2, Power, Download
 } from 'lucide-react';
 
 export default function GestionGerencialApp({ onLogout }) {
@@ -15,6 +15,7 @@ export default function GestionGerencialApp({ onLogout }) {
   const [facturaSeleccionada, setFacturaSeleccionada] = useState(null); 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [loading, setLoading] = useState(true); 
+  const [descargandoPdfId, setDescargandoPdfId] = useState(null);
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalType, setModalType] = useState('');
@@ -58,9 +59,9 @@ export default function GestionGerencialApp({ onLogout }) {
     ).join('\n') || '';
 
     const estructuraXml = `<?xml version="1.0" encoding="UTF-8"?>
-<Comprobante Fiscal="Simulado" Folio="${factura.folio_interno || factura.id}" UUID="${factura.uuid || ''}" FechaEmision="${factura.fecha_emision || ''}">
+<Comprobante Fiscal="Simulado" Folio="${factura.folio_interno}" UUID="${factura.uuid || ''}" FechaEmision="${factura.fecha_emision || ''}">
   <Emisor RazonSocial="${factura.emisor?.razon_social || 'Hotel Villa Lince S.A. de C.V.'}" RFC="${factura.emisor?.rfc || 'HVL260311LN8'}" RegimenFiscal="601" />
-  <Receptor RazonSocial="${factura.receptor?.nombre_razon_social || factura.empresa}" RFC="${factura.receptor?.rfc || 'XAXX010101000'}" Esquema="${factura.receptor?.convenio_aplicado || 'Ninguno'}" />
+  <Receptor RazonSocial="${factura.receptor?.nombre_razon_social || ''}" RFC="${factura.receptor?.rfc || 'XAXX010101000'}" Esquema="${factura.receptor?.convenio_aplicado || 'Ninguno'}" />
   <Conceptos>
 ${nodosConceptos}
   </Conceptos>
@@ -68,17 +69,53 @@ ${nodosConceptos}
     <Traslado Impuesto="IVA" Tasa="0.16" Importe="${factura.impuestos?.iva_total || 0}" />
     <Traslado Impuesto="ISH" Tasa="0.03" Importe="${factura.impuestos?.ish_total || 0}" />
   </Impuestos>
-  <Totales SubTotal="${(factura.totales?.subtotal || 0).toFixed(2)}" TotalDescuento="${(factura.totales?.total_descuento || 0).toFixed(2)}" TotalNeto="${(factura.totales?.total_neto || 0).toFixed(2)}" EstadoPago="${factura.estado_pago || factura.estado}" />
+  <Totales SubTotal="${(factura.totales?.subtotal || 0).toFixed(2)}" TotalDescuento="${(factura.totales?.total_descuento || 0).toFixed(2)}" TotalNeto="${(factura.totales?.total_neto || 0).toFixed(2)}" EstadoPago="${factura.estado_pago}" />
 </Comprobante>`;
 
     // Generamos el Blob en formato XML
     const blob = new Blob([estructuraXml], { type: 'text/xml;charset=utf-8;' });
     const downloadAnchor = document.createElement('a');
     downloadAnchor.setAttribute("href", URL.createObjectURL(blob));
-    downloadAnchor.setAttribute("download", `Factura_${factura.folio_interno || factura.id}.xml`);
+    downloadAnchor.setAttribute("download", `Factura_${factura.folio_interno}.xml`);
     document.body.appendChild(downloadAnchor);
     downloadAnchor.click();
     downloadAnchor.remove();
+  };
+
+  // Descarga el PDF real generado por Flask con ReportLab
+  const descargarPDF = async (factura) => {
+    const id = factura.factura_id;
+    if (!id) {
+      showToast("No se pudo identificar la factura para generar el PDF.", "error");
+      return;
+    }
+    setDescargandoPdfId(id);
+    try {
+      const response = await fetch(`http://localhost:5000/api/factura_pdf/${id}`);
+      if (!response.ok) {
+        let mensajeError = "Error al generar el PDF en el servidor.";
+        try {
+          const err = await response.json();
+          mensajeError = err.error || mensajeError;
+        } catch (_) {}
+        showToast(mensajeError, "error");
+        return;
+      }
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `Factura_${factura.folio_interno || id}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      showToast("PDF descargado correctamente.", "success");
+    } catch (error) {
+      showToast("Error de conexión al descargar el PDF.", "error");
+    } finally {
+      setDescargandoPdfId(null);
+    }
   };
 
   const dispararImpresion = () => {
@@ -390,9 +427,7 @@ ${nodosConceptos}
             <thead>
               <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 text-sm">
                 <th className="p-4 font-semibold">Folio Interno</th>
-                {/* 🔽 SE SEPARAN LAS COLUMNAS EN DOS AQUÍ */}
-                <th className="p-4 font-semibold">Empresa Afiliada</th>
-                <th className="p-4 font-semibold">Huésped Titular</th>
+                <th className="p-4 font-semibold">Receptor (Empresa o Huésped)</th>
                 <th className="p-4 font-semibold">Fecha Emisión</th>
                 <th className="p-4 font-semibold">Monto Neto</th>
                 <th className="p-4 font-semibold">Estado</th>
@@ -402,51 +437,66 @@ ${nodosConceptos}
             <tbody className="divide-y divide-slate-100 text-sm">
               {facturas.length === 0 ? (
                 <tr>
-                  <td colSpan="7" className="p-6 text-center text-slate-500">No hay facturas generadas en el sistema.</td>
+                  <td colSpan="6" className="p-6 text-center text-slate-500">No hay facturas generadas en el sistema.</td>
                 </tr>
               ) : (
                 facturas.map(fac => (
-                  <tr key={fac.id_real || fac.factura_id} className="hover:bg-slate-50 transition-colors">
-                    <td className="p-4 font-mono font-bold text-indigo-600">{fac.folio_interno || fac.id}</td>
-                    
-                    {/* Celda de la Empresa */}
-                    <td className="p-4 font-semibold text-slate-800">
-                      {fac.empresa_nombre || "Particular"}
-                    </td>
+                  <tr key={fac.factura_id} className="hover:bg-slate-50 transition-colors">
+                    <td className="p-4 font-mono font-bold text-indigo-600">{fac.folio_interno}</td>
 
-                    {/* Celda del Huésped */}
-                    <td className="p-4 text-slate-600">
-                      {fac.huesped_nombre || "Huésped General"}
+                    {/* Receptor: viene siempre en fac.receptor.nombre_razon_social */}
+                    <td className="p-4">
+                      <div className="font-semibold text-slate-800">
+                        {fac.receptor?.nombre_razon_social || "Huésped General"}
+                      </div>
+                      {fac.receptor?.convenio_aplicado && fac.receptor.convenio_aplicado !== 'Ninguno' && (
+                        <div className="text-xs text-indigo-500">{fac.receptor.convenio_aplicado}</div>
+                      )}
                     </td>
 
                     <td className="p-4 text-slate-500">
-                      {fac.fecha_emision ? new Date(fac.fecha_emision).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' }) : fac.fecha}
+                      {fac.fecha_emision
+                        ? new Date(fac.fecha_emision).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' })
+                        : '—'}
                     </td>
+
                     <td className="p-4 font-bold text-slate-900">
-                      {typeof fac.totales?.total_neto === 'number' ? `$${fac.totales.total_neto.toFixed(2)}` : fac.monto}
+                      {typeof fac.totales?.total_neto === 'number' ? `$${fac.totales.total_neto.toFixed(2)}` : '—'}
                     </td>
+
                     <td className="p-4">
                       <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium border ${
-                        (fac.estado_pago || fac.estado) === 'Pagado' || (fac.estado_pago || fac.estado) === 'Pagada'
+                        ['Pagado', 'Pagada'].includes(fac.estado_pago)
                           ? 'bg-emerald-50 text-emerald-700 border-emerald-200' 
                           : 'bg-amber-50 text-amber-700 border-amber-200'
                       }`}>
-                        {fac.estado_pago || fac.estado}
+                        {fac.estado_pago}
                       </span>
                     </td>
-                    <td className="p-4 text-center space-x-2">
-                      <button 
-                        onClick={() => setFacturaSeleccionada(fac)}
-                        className="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-lg text-xs font-medium transition-colors"
-                      >
-                        Ver Factura
-                      </button>
-                      <button 
-                        onClick={() => descargarXML(fac)}
-                        className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors"
-                      >
-                        Formato XML
-                      </button>
+
+                    <td className="p-4 text-center">
+                      <div className="flex items-center justify-center gap-2 flex-wrap">
+                        <button 
+                          onClick={() => setFacturaSeleccionada(fac)}
+                          className="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-lg text-xs font-medium transition-colors"
+                        >
+                          Ver Factura
+                        </button>
+                        <button 
+                          onClick={() => descargarPDF(fac)}
+                          disabled={descargandoPdfId === fac.factura_id}
+                          className="bg-rose-600 hover:bg-rose-700 disabled:bg-rose-300 text-white px-3 py-1.5 rounded-lg text-xs font-medium transition-colors flex items-center gap-1"
+                        >
+                          <Download size={13} />
+                          {descargandoPdfId === fac.factura_id ? 'Generando...' : 'PDF'}
+                        </button>
+                        <button 
+                          onClick={() => descargarXML(fac)}
+                          className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors"
+                        >
+                          XML
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))
@@ -486,7 +536,6 @@ ${nodosConceptos}
             background-color: #ffffff !important;
             color: #000000 !important;
           }
-          /* Forzamos al contenedor del comprobante a tomar la totalidad de la pantalla de impresión */
           .print-modal-layout {
             position: absolute !important;
             left: 0 !important;
@@ -653,7 +702,6 @@ ${nodosConceptos}
                 <form onSubmit={handleActualizarConvenio} className="space-y-4">
                   <div>
                     <label className="block text-sm font-medium text-slate-700 mb-1">Empresa Aliada</label>
-                    {/* Quitamos el 'disabled' e introducimos el atributo name para capturar el valor en el submit */}
                     <input required name="empresa" type="text" defaultValue={editingConvenio.empresa} className="w-full border border-slate-300 rounded-lg px-4 py-2.5 outline-none text-slate-800 text-sm" />
                   </div>
                   <div>
@@ -714,8 +762,12 @@ ${nodosConceptos}
           <div className="bg-white text-gray-900 w-full max-w-4xl p-8 rounded-2xl shadow-2xl relative border border-gray-300 my-auto format-pdf-sheet">
             {/* Controles superiores */}
             <div className="absolute top-4 right-4 flex space-x-2 no-print">
+              <button onClick={() => descargarPDF(facturaSeleccionada)} className="bg-rose-600 hover:bg-rose-700 text-white px-4 py-2 rounded-xl font-medium text-sm transition-all flex items-center gap-1.5">
+                <Download size={15} />
+                Descargar PDF
+              </button>
               <button onClick={dispararImpresion} className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl font-medium text-sm transition-all">
-                🖨️ Imprimir / Guardar PDF
+                🖨️ Imprimir
               </button>
               <button onClick={() => setFacturaSeleccionada(null)} className="bg-slate-200 hover:bg-slate-300 text-slate-700 px-4 py-2 rounded-xl font-medium text-sm transition-all">
                 Cerrar
@@ -733,7 +785,7 @@ ${nodosConceptos}
               </div>
               <div className="text-right bg-slate-50 p-4 rounded-xl border border-slate-200">
                 <h3 className="text-xs font-bold text-slate-700 uppercase">Comprobante Fiscal Digital</h3>
-                <p className="text-lg font-mono font-bold text-indigo-600">{facturaSeleccionada.folio_interno || facturaSeleccionada.id}</p>
+                <p className="text-lg font-mono font-bold text-indigo-600">{facturaSeleccionada.folio_interno}</p>
                 <p className="text-[10px] font-mono text-gray-500 mt-2">UUID FISCAL SIMULADO:</p>
                 <p className="text-[10px] font-mono text-gray-600 bg-gray-200 p-1 rounded break-all select-all">{facturaSeleccionada.uuid || 'f47ac10b-58cc-4372-a567-0e02b2c3d479'}</p>
                 <p className="text-xs text-gray-500 mt-1">Emisión: {facturaSeleccionada.fecha_emision ? new Date(facturaSeleccionada.fecha_emision).toLocaleString() : new Date().toLocaleString()}</p>
@@ -745,7 +797,7 @@ ${nodosConceptos}
               <h4 className="font-bold text-indigo-950 uppercase mb-2">Receptor del Comprobante</h4>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                 <div>
-                  <p><span className="font-semibold text-gray-600">Razón Social:</span> {facturaSeleccionada.receptor?.nombre_razon_social || facturaSeleccionada.empresa}</p>
+                  <p><span className="font-semibold text-gray-600">Razón Social:</span> {facturaSeleccionada.receptor?.nombre_razon_social}</p>
                   <p><span className="font-semibold text-gray-600">RFC Fiscal:</span> {facturaSeleccionada.receptor?.rfc || 'XAXX010101000'}</p>
                 </div>
                 <div>
@@ -775,15 +827,7 @@ ${nodosConceptos}
                     <td className="p-3 text-right text-rose-600">-${concepto.descuento.toFixed(2)}</td>
                     <td className="p-3 text-right font-bold text-slate-900">${concepto.importe.toFixed(2)}</td>
                   </tr>
-                )) || (
-                  <tr className="border-b border-slate-200">
-                    <td className="p-3 font-medium text-slate-800">Servicios de Hospedaje Generales contratados</td>
-                    <td className="p-3 text-center font-bold text-gray-600">1</td>
-                    <td className="p-3 text-right text-gray-700">{facturaSeleccionada.monto}</td>
-                    <td className="p-3 text-right text-rose-600">-$0.00</td>
-                    <td className="p-3 text-right font-bold text-slate-900">{facturaSeleccionada.monto}</td>
-                  </tr>
-                )}
+                ))}
               </tbody>
             </table>
 
@@ -808,7 +852,7 @@ ${nodosConceptos}
                 </div>
                 <div className="flex justify-between text-indigo-900 font-black text-sm pt-1">
                   <span>TOTAL GENERAL NETO:</span>
-                  <span>{facturaSeleccionada.totales?.total_neto ? `$${facturaSeleccionada.totales.total_neto.toFixed(2)}` : facturaSeleccionada.monto}</span>
+                  <span>${(facturaSeleccionada.totales?.total_neto || 0).toFixed(2)}</span>
                 </div>
               </div>
             </div>
@@ -817,7 +861,7 @@ ${nodosConceptos}
             <div className="mt-8 border-t border-gray-200 pt-4 text-[9px] text-gray-400 font-mono leading-tight">
               <p className="font-bold text-gray-500 mb-1 uppercase tracking-wide">Cadena Original del Complemento de Certificación Digital:</p>
               <p className="break-all bg-slate-50 p-2 rounded border border-slate-100">
-                ||1.1|{facturaSeleccionada.uuid || 'f47ac10b-58cc-4372-a567-0e02b2c3d479'}|2026-06-04T11:54:00|HVL260311LN8|mSgWq9A7bC+pX0vLk1M9zY3RtWE5nN...
+                ||1.1|{facturaSeleccionada.uuid || 'f47ac10b-58cc-4372-a567-0e02b2c3d479'}|{facturaSeleccionada.fecha_emision || ''}|HVL260311LN8|mSgWq9A7bC+pX0vLk1M9zY3RtWE5nN...
               </p>
               <p className="mt-4 text-center text-gray-400 font-sans">Este documento es una representación impresa de un CFDI simulado para fines académicos universitarios.</p>
             </div>
