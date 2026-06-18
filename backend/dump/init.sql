@@ -887,3 +887,7 @@ ALTER TABLE `detalles_huesped` MODIFY `id_detalle` int NOT NULL AUTO_INCREMENT, 
 ALTER TABLE `pago` MODIFY `id_pago` int NOT NULL AUTO_INCREMENT, AUTO_INCREMENT = 23;
 ALTER TABLE `factura` MODIFY `id_factura` int NOT NULL AUTO_INCREMENT, AUTO_INCREMENT = 15;
 
+INSERT INTO `convenio` (`id_convenio`, `empresa_id`, `terminos`, `descuento`, `fecha_inicio`, `fecha_fin`, `activo`) VALUES
+(7, 1, 'Convenio de prueba para alerta de vencimiento próximo', 12.00, '2025-07-12', '2026-07-12', 1);
+
+ALTER TABLE `convenio` MODIFY `id_convenio` int NOT NULL AUTO_INCREMENT, AUTO_INCREMENT = 8;
