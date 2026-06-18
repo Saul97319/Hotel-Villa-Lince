@@ -844,7 +844,7 @@ ALTER TABLE `reserva`
 --
 ALTER TABLE `servicio`
   ADD CONSTRAINT `servicio_ibfk_1` FOREIGN KEY (`reserva_id`) REFERENCES `reserva` (`id_reserva`);
-COMMIT;
+
 
 /*!40101 SET CHARACTER_SET_CLIENT=@OLD_CHARACTER_SET_CLIENT */;
 /*!40101 SET CHARACTER_SET_RESULTS=@OLD_CHARACTER_SET_RESULTS */;
@@ -891,3 +891,7 @@ INSERT INTO `convenio` (`id_convenio`, `empresa_id`, `terminos`, `descuento`, `f
 (7, 1, 'Convenio de prueba para alerta de vencimiento próximo', 12.00, '2025-07-12', '2026-07-12', 1);
 
 ALTER TABLE `convenio` MODIFY `id_convenio` int NOT NULL AUTO_INCREMENT, AUTO_INCREMENT = 8;
+
+
+
+COMMIT;
