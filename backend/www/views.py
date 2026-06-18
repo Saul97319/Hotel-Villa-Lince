@@ -2612,3 +2612,34 @@ def descargar_factura_pdf(factura_id):
 
 
 
+@views.route('/api/ocupacion_actual', methods=['GET'])
+def api_ocupacion_actual():
+    """Endpoint ligero y público: solo el % de ocupación actual del hotel."""
+    try:
+        total_habitaciones = Habitacion.query.count()
+
+        if total_habitaciones == 0:
+            return jsonify({
+                'total_habitaciones': 0,
+                'ocupadas': 0,
+                'disponibles': 0,
+                'porcentaje_ocupacion': 0.0
+            }), 200
+
+        ocupadas = Habitacion.query.filter(
+            Habitacion.estado.in_(['Ocupada', 'ocupada'])
+        ).count()
+
+        disponibles = total_habitaciones - ocupadas
+        porcentaje = round((ocupadas / total_habitaciones) * 100, 1)
+
+        return jsonify({
+            'total_habitaciones': total_habitaciones,
+            'ocupadas': ocupadas,
+            'disponibles': disponibles,
+            'porcentaje_ocupacion': porcentaje
+        }), 200
+
+    except Exception as e:
+        print(f"Error en api_ocupacion_actual: {str(e)}")
+        return jsonify({'error': 'Error al calcular la ocupación actual'}), 500

@@ -1,14 +1,21 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Building2, Users, FileText, Plus, Send, CheckCircle2, 
-  AlertCircle, XCircle, X, Briefcase, Calendar, Hotel, LogOut, Edit, Trash2, Power, Download
+  AlertCircle, XCircle, X, Briefcase, Calendar, Hotel, LogOut, Edit, Trash2, Power, Download,
+  LayoutDashboard, BedDouble
 } from 'lucide-react';
 
 export default function GestionGerencialApp({ onLogout }) {
   // ==========================================
   // ESTADOS DEL COMPONENTE
   // ==========================================
-  const [activeTab, setActiveTab] = useState('convenios');
+  const [activeTab, setActiveTab] = useState('resumen');
+  const [ocupacionActual, setOcupacionActual] = useState({
+    total_habitaciones: 0,
+    ocupadas: 0,
+    disponibles: 0,
+    porcentaje_ocupacion: 0
+  });
   const [convenios, setConvenios] = useState([]);
   const [representantes, setRepresentantes] = useState([]);
   const [facturas, setFacturas] = useState([]);
@@ -29,15 +36,17 @@ export default function GestionGerencialApp({ onLogout }) {
   const fetchData = async () => {
     try {
       setLoading(true);
-      const [convRes, repRes, facRes] = await Promise.all([
+      const [convRes, repRes, facRes, ocupRes] = await Promise.all([
         fetch('http://localhost:5000/api/convenios'),
         fetch('http://localhost:5000/api/representantes'),
-        fetch('http://localhost:5000/api/facturas_gerencia')
+        fetch('http://localhost:5000/api/facturas_gerencia'),
+        fetch('http://localhost:5000/api/ocupacion_actual')
       ]);
 
       if (convRes.ok) setConvenios(await convRes.json());
       if (repRes.ok) setRepresentantes(await repRes.json());
       if (facRes.ok) setFacturas(await facRes.json());
+      if (ocupRes.ok) setOcupacionActual(await ocupRes.json());
     } catch (error) {
       showToast("Error de conexión al cargar los datos corporativos.", "error");
     } finally {
@@ -273,6 +282,81 @@ ${nodosConceptos}
   // ==========================================
   // COMPONENTES DE RENDEREADO INTERNO
   // ==========================================
+  const renderResumen = () => (
+    <div className="animate-fade-in">
+      <div className="mb-6">
+        <h2 className="text-2xl font-bold text-slate-800">Resumen Gerencial</h2>
+        <p className="text-slate-500 text-sm mt-1">Indicadores operativos en tiempo real del hotel.</p>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+        {/* TARJETA: OCUPACIÓN ACTUAL */}
+        <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm hover:shadow-md transition-all duration-200 relative overflow-hidden">
+          <div className="absolute top-0 right-0 w-24 h-24 bg-gradient-to-bl from-indigo-500/5 to-transparent rounded-full pointer-events-none"></div>
+          <div className="flex items-center justify-between mb-4">
+            <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Ocupación Actual</span>
+            <div className="p-2.5 bg-indigo-50 rounded-xl text-indigo-600">
+              <BedDouble className="w-5 h-5" />
+            </div>
+          </div>
+          <div className="flex items-end justify-between">
+            <div>
+              <h3 className="text-3xl font-black text-slate-900 tracking-tight">
+                {ocupacionActual.porcentaje_ocupacion}%
+              </h3>
+              <p className="text-xs text-slate-400 mt-1 font-medium">
+                {ocupacionActual.ocupadas} de {ocupacionActual.total_habitaciones} habitaciones ocupadas
+              </p>
+            </div>
+          </div>
+          <div className="w-full bg-slate-100 h-1.5 rounded-full mt-4 overflow-hidden">
+            <div
+              className="bg-gradient-to-r from-indigo-500 to-purple-500 h-full rounded-full transition-all duration-1000"
+              style={{ width: `${ocupacionActual.porcentaje_ocupacion}%` }}
+            ></div>
+          </div>
+        </div>
+
+        {/* TARJETA: HABITACIONES DISPONIBLES */}
+        <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm hover:shadow-md transition-all duration-200 relative overflow-hidden">
+          <div className="absolute top-0 right-0 w-24 h-24 bg-gradient-to-bl from-emerald-500/5 to-transparent rounded-full pointer-events-none"></div>
+          <div className="flex items-center justify-between mb-4">
+            <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Disponibles Ahora</span>
+            <div className="p-2.5 bg-emerald-50 rounded-xl text-emerald-600">
+              <Hotel className="w-5 h-5" />
+            </div>
+          </div>
+          <h3 className="text-3xl font-black text-slate-900 tracking-tight">
+            {ocupacionActual.disponibles}
+          </h3>
+          <p className="text-xs text-slate-400 mt-1 font-medium">Listas para asignar</p>
+        </div>
+
+        {/* TARJETA: CONVENIOS ACTIVOS */}
+        <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm hover:shadow-md transition-all duration-200 relative overflow-hidden">
+          <div className="absolute top-0 right-0 w-24 h-24 bg-gradient-to-bl from-amber-500/5 to-transparent rounded-full pointer-events-none"></div>
+          <div className="flex items-center justify-between mb-4">
+            <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Convenios Activos</span>
+            <div className="p-2.5 bg-amber-50 rounded-xl text-amber-600">
+              <Building2 className="w-5 h-5" />
+            </div>
+          </div>
+          <h3 className="text-3xl font-black text-slate-900 tracking-tight">
+            {convenios.filter(c => c.estado === 'Activo').length}
+          </h3>
+          <p className="text-xs text-slate-400 mt-1 font-medium">de {convenios.length} convenios totales</p>
+        </div>
+      </div>
+
+      <button
+        onClick={fetchData}
+        className="mt-6 text-xs text-indigo-600 font-bold hover:text-indigo-700 flex items-center gap-1.5 bg-indigo-50 hover:bg-indigo-100/80 px-3 py-2 rounded-lg transition-colors"
+      >
+        Actualizar indicadores
+      </button>
+    </div>
+  );
+
   const renderConvenios = () => (
     <div className="animate-fade-in">
       <div className="flex justify-between items-center mb-6">
@@ -569,6 +653,15 @@ ${nodosConceptos}
 
         <nav className="flex-1 px-4 py-6 space-y-2">
           <button 
+            onClick={() => setActiveTab('resumen')}
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 ${
+              activeTab === 'resumen' ? 'bg-white/15 text-white shadow-sm border border-white/10' : 'text-indigo-200 hover:bg-white/5 hover:text-white'
+            }`}
+          >
+            <LayoutDashboard size={20} />
+            <span className="font-medium text-sm">Resumen</span>
+          </button>
+          <button 
             onClick={() => setActiveTab('convenios')}
             className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 ${
               activeTab === 'convenios' ? 'bg-white/15 text-white shadow-sm border border-white/10' : 'text-indigo-200 hover:bg-white/5 hover:text-white'
@@ -623,6 +716,7 @@ ${nodosConceptos}
 
         <div className="flex-1 overflow-auto p-4 md:p-8">
           <div className="max-w-6xl mx-auto">
+            {activeTab === 'resumen' && renderResumen()}
             {activeTab === 'convenios' && renderConvenios()}
             {activeTab === 'representantes' && renderRepresentantes()}
             {activeTab === 'facturas' && renderFacturas()}
