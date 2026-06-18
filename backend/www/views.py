@@ -2122,7 +2122,13 @@ def obtener_facturas_gerencia():
                     "regimen_fiscal": "601 - General de Ley Personas Morales"
                 },
                 "receptor": {
-                    "nombre_razon_social": f.empresa.nombre if f.empresa else (f"{cliente.nombre} {cliente.apellido}".strip() if cliente else "Huésped General"),
+                    "nombre_razon_social": (
+                        f.empresa.nombre if f.empresa
+                        else (
+                            " ".join(filter(None, [cliente.nombre, cliente.apellido])).strip()
+                            if cliente else "Huésped General"
+                        )
+                    ),
                     "rfc": f.empresa.rfc if f.empresa else (detalles_huesped.rfc if detalles_huesped else 'XAXX010101000'),
                     "convenio_aplicado": nombre_convenio, # <-- CORREGIDO: Asignación limpia sin operador de asignación inválido
                     "descuento_porcentaje": descuento_corp
@@ -2408,7 +2414,7 @@ def descargar_factura_pdf(factura_id):
             if conv:
                 descuento_pct = float(conv.descuento or 0.0)
         else:
-            receptor_nombre = f"{cliente.nombre} {cliente.apellido}".strip() if cliente else "Huésped General"
+            receptor_nombre = " ".join(filter(None, [cliente.nombre, cliente.apellido])).strip() if cliente else "Huésped General"
             receptor_rfc = detalles.rfc if detalles and detalles.rfc else "XAXX010101000"
             convenio_txt = "Ninguno"
             descuento_pct = 0.0

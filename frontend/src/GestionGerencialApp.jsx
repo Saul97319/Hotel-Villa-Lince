@@ -531,7 +531,7 @@ ${nodosConceptos}
                     {/* Receptor: viene siempre en fac.receptor.nombre_razon_social */}
                     <td className="p-4">
                       <div className="font-semibold text-slate-800">
-                        {fac.receptor?.nombre_razon_social || "Huésped General"}
+                        {fac.receptor?.nombre_razon_social || fac.receptor?.nombre || "Huésped General"}
                       </div>
                       {fac.receptor?.convenio_aplicado && fac.receptor.convenio_aplicado !== 'Ninguno' && (
                         <div className="text-xs text-indigo-500">{fac.receptor.convenio_aplicado}</div>
@@ -891,7 +891,7 @@ ${nodosConceptos}
               <h4 className="font-bold text-indigo-950 uppercase mb-2">Receptor del Comprobante</h4>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                 <div>
-                  <p><span className="font-semibold text-gray-600">Razón Social:</span> {facturaSeleccionada.receptor?.nombre_razon_social}</p>
+                  <p><span className="font-semibold text-gray-600">Razón Social:</span> {facturaSeleccionada.receptor?.nombre_razon_social || facturaSeleccionada.receptor?.nombre || 'No especificado'}</p>
                   <p><span className="font-semibold text-gray-600">RFC Fiscal:</span> {facturaSeleccionada.receptor?.rfc || 'XAXX010101000'}</p>
                 </div>
                 <div>
