@@ -2431,6 +2431,7 @@ def descargar_factura_pdf(factura_id):
         descuento_hab = subtotal_hospedaje * (descuento_pct / 100)
         importe_hospedaje = subtotal_hospedaje - descuento_hab
 
+
         servicios_extra = reserva.servicios or []
         total_servicios = sum(float(s.costo or 0) for s in servicios_extra)
 
