@@ -3,8 +3,8 @@
 -- https://www.phpmyadmin.net/
 --
 -- Servidor: db
--- Tiempo de generación: 09-06-2026 a las 20:30:29
--- Versión del servidor: 8.0.45
+-- Tiempo de generación: 18-06-2026 a las 19:12:18
+-- Versión del servidor: 8.0.46
 -- Versión de PHP: 8.3.26
 
 SET SQL_MODE = "NO_AUTO_VALUE_ON_ZERO";
@@ -27,7 +27,6 @@ SET time_zone = "+00:00";
 -- Estructura de tabla para la tabla `Admin`
 --
 
-DROP TABLE IF EXISTS `Admin`;
 CREATE TABLE `Admin` (
   `id_admin` int NOT NULL,
   `usuario` varchar(100) NOT NULL,
@@ -49,7 +48,6 @@ INSERT INTO `Admin` (`id_admin`, `usuario`, `contrasena`) VALUES
 -- Estructura de tabla para la tabla `admin`
 --
 
-DROP TABLE IF EXISTS `admin`;
 CREATE TABLE `admin` (
   `id_admin` int NOT NULL,
   `nombre` varchar(100) DEFAULT NULL,
@@ -76,7 +74,6 @@ INSERT INTO `admin` (`id_admin`, `nombre`, `email`, `password_hash`, `estado`, `
 -- Estructura de tabla para la tabla `cliente`
 --
 
-DROP TABLE IF EXISTS `cliente`;
 CREATE TABLE `cliente` (
   `id_cliente` int NOT NULL,
   `nombre` varchar(100) DEFAULT NULL,
@@ -118,7 +115,8 @@ INSERT INTO `cliente` (`id_cliente`, `nombre`, `apellido`, `telefono`, `email`, 
 (28, 'Orlando Gómez Martínez', '', '3314149249', 'Orlando12@gmail.com', 'Particular', '2026-06-09 19:18:06'),
 (29, 'Pedro Medina Jara', '', '3312456578', 'PedroJara@gmail.com', 'Particular', '2026-06-09 19:34:59'),
 (30, 'Don Pedro José Donoso', '', '8001037809', 'PedroDonoso7332@hotmail.com', 'Ejecutivo', '2026-06-09 19:40:55'),
-(31, 'Brayan Moran', '', '3312546789', 'bmoran83@gmail.com', 'Particular', '2026-06-09 19:57:53');
+(31, 'Brayan Moran', '', '3312546789', 'bmoran83@gmail.com', 'Particular', '2026-06-09 19:57:53'),
+(32, 'Enrique Peña Nieto', '', '555 0000 555', 'Morena@bienestar.com', 'Ejecutivo', '2026-06-15 12:00:00');
 
 -- --------------------------------------------------------
 
@@ -126,7 +124,6 @@ INSERT INTO `cliente` (`id_cliente`, `nombre`, `apellido`, `telefono`, `email`, 
 -- Estructura de tabla para la tabla `convenio`
 --
 
-DROP TABLE IF EXISTS `convenio`;
 CREATE TABLE `convenio` (
   `id_convenio` int NOT NULL,
   `empresa_id` int DEFAULT NULL,
@@ -145,7 +142,8 @@ INSERT INTO `convenio` (`id_convenio`, `empresa_id`, `terminos`, `descuento`, `f
 (1, 1, 'Convenio anual', 10.00, '2025-01-01', '2025-12-31', 1),
 (4, 4, 'Convenio básico', 5.00, '2025-01-01', '2025-12-31', 1),
 (5, 5, 'Convenio de 1 año con lo que respecta 2026-2027', 10.00, '2026-05-28', '2027-05-28', 1),
-(6, 9, 'Tarifa preferencial ejecutiva', 15.00, '2026-06-04', '2027-06-04', 1);
+(6, 9, 'Tarifa preferencial ejecutiva', 15.00, '2026-06-04', '2027-06-04', 1),
+(7, 1, 'Convenio de prueba para alerta de vencimiento próximo', 12.00, '2025-07-12', '2026-07-12', 1);
 
 -- --------------------------------------------------------
 
@@ -153,7 +151,6 @@ INSERT INTO `convenio` (`id_convenio`, `empresa_id`, `terminos`, `descuento`, `f
 -- Estructura de tabla para la tabla `detalles_huesped`
 --
 
-DROP TABLE IF EXISTS `detalles_huesped`;
 CREATE TABLE `detalles_huesped` (
   `id_detalle` int NOT NULL,
   `reserva_id` int DEFAULT NULL,
@@ -192,7 +189,8 @@ INSERT INTO `detalles_huesped` (`id_detalle`, `reserva_id`, `fecha_nacimiento`, 
 (21, 27, NULL, 1, '3314149249', 'Orlando12@gmail.com', '', ''),
 (22, 28, NULL, 2, '3312456578', 'PedroJara@gmail.com', '', ''),
 (23, 29, NULL, 2, '8001037809', 'PedroDonoso7332@hotmail.com', 'Gerente regional', 'DPJEHUER453JHB2'),
-(24, 30, '2004-01-09', 4, '3312546789', 'bmoran83@gmail.com', '', '');
+(24, 30, '2004-01-09', 4, '3312546789', 'bmoran83@gmail.com', '', ''),
+(25, 31, '1966-07-20', 2, '555 0000 555', 'Morena@bienestar.com', 'Gobernador', 'PEEN660720HJC');
 
 -- --------------------------------------------------------
 
@@ -200,7 +198,6 @@ INSERT INTO `detalles_huesped` (`id_detalle`, `reserva_id`, `fecha_nacimiento`, 
 -- Estructura de tabla para la tabla `empleado`
 --
 
-DROP TABLE IF EXISTS `empleado`;
 CREATE TABLE `empleado` (
   `id_empleado` int NOT NULL,
   `nombre` varchar(100) DEFAULT NULL,
@@ -231,7 +228,6 @@ INSERT INTO `empleado` (`id_empleado`, `nombre`, `apellido`, `email`, `password_
 -- Estructura de tabla para la tabla `empresa`
 --
 
-DROP TABLE IF EXISTS `empresa`;
 CREATE TABLE `empresa` (
   `id_empresa` int NOT NULL,
   `nombre` varchar(150) DEFAULT NULL,
@@ -259,7 +255,6 @@ INSERT INTO `empresa` (`id_empresa`, `nombre`, `rfc`, `telefono`, `email`, `esta
 -- Estructura de tabla para la tabla `factura`
 --
 
-DROP TABLE IF EXISTS `factura`;
 CREATE TABLE `factura` (
   `id_factura` int NOT NULL,
   `reserva_id` int DEFAULT NULL,
@@ -271,13 +266,21 @@ CREATE TABLE `factura` (
   `generado_por_empleado` int DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
+--
+-- Volcado de datos para la tabla `factura`
+--
+
+INSERT INTO `factura` (`id_factura`, `reserva_id`, `empresa_id`, `total`, `estado`, `tipo_envio`, `fecha_emision`, `generado_por_empleado`) VALUES
+(12, 31, NULL, 12495.00, 'Pagada', 'DIGITAL', '2026-06-18 11:35:00', 5),
+(13, 22, 9, 2400.00, 'Pendiente', 'DIGITAL', '2026-06-09 02:25:00', 1),
+(14, 24, NULL, 10500.00, 'Pagada', 'DIGITAL', '2026-06-09 02:40:00', 1);
+
 -- --------------------------------------------------------
 
 --
 -- Estructura de tabla para la tabla `factura_detalle`
 --
 
-DROP TABLE IF EXISTS `factura_detalle`;
 CREATE TABLE `factura_detalle` (
   `id_detalle` int NOT NULL,
   `factura_id` int DEFAULT NULL,
@@ -301,7 +304,6 @@ INSERT INTO `factura_detalle` (`id_detalle`, `factura_id`, `servicio_id`, `subto
 -- Estructura de tabla para la tabla `habitacion`
 --
 
-DROP TABLE IF EXISTS `habitacion`;
 CREATE TABLE `habitacion` (
   `id_habitacion` int NOT NULL,
   `numero` int DEFAULT NULL,
@@ -374,7 +376,6 @@ INSERT INTO `habitacion` (`id_habitacion`, `numero`, `tipo`, `precio_noche`, `es
 -- Estructura de tabla para la tabla `huesped_empresarial`
 --
 
-DROP TABLE IF EXISTS `huesped_empresarial`;
 CREATE TABLE `huesped_empresarial` (
   `id_huesped` int NOT NULL,
   `empresa_id` int DEFAULT NULL,
@@ -400,7 +401,6 @@ INSERT INTO `huesped_empresarial` (`id_huesped`, `empresa_id`, `nombre`, `fecha_
 -- Estructura de tabla para la tabla `pago`
 --
 
-DROP TABLE IF EXISTS `pago`;
 CREATE TABLE `pago` (
   `id_pago` int NOT NULL,
   `reserva_id` int DEFAULT NULL,
@@ -432,7 +432,8 @@ INSERT INTO `pago` (`id_pago`, `reserva_id`, `monto`, `metodo_pago`, `estado_pag
 (18, 25, 900.00, 'Tarjeta (Bancaria - 0236)', 'Completado', '2026-06-09 02:37:54'),
 (19, 27, 927.00, 'Terminal POS (Bancaria (+3% vPOS))', 'Completado', '2026-06-09 19:18:07'),
 (20, 28, 1260.00, 'Terminal POS (Bancaria (+5% vPOS))', 'Completado', '2026-06-09 19:34:59'),
-(21, 29, 4590.00, 'Terminal POS (Bancaria (+0% vPOS))', 'Completado', '2026-06-09 19:40:55');
+(21, 29, 4590.00, 'Terminal POS (Bancaria (+0% vPOS))', 'Completado', '2026-06-09 19:40:55'),
+(22, 31, 10920.00, 'Tarjeta (Bancaria - 0236)', 'Completado', '2026-06-18 11:30:00');
 
 -- --------------------------------------------------------
 
@@ -440,7 +441,6 @@ INSERT INTO `pago` (`id_pago`, `reserva_id`, `monto`, `metodo_pago`, `estado_pag
 -- Estructura de tabla para la tabla `reporte`
 --
 
-DROP TABLE IF EXISTS `reporte`;
 CREATE TABLE `reporte` (
   `id_reporte` int NOT NULL,
   `tipo` varchar(50) DEFAULT NULL,
@@ -466,7 +466,6 @@ INSERT INTO `reporte` (`id_reporte`, `tipo`, `fecha_inicio`, `fecha_fin`, `estad
 -- Estructura de tabla para la tabla `reserva`
 --
 
-DROP TABLE IF EXISTS `reserva`;
 CREATE TABLE `reserva` (
   `id_reserva` int NOT NULL,
   `cliente_id` int DEFAULT NULL,
@@ -495,7 +494,8 @@ INSERT INTO `reserva` (`id_reserva`, `cliente_id`, `habitacion_id`, `empleado_id
 (27, 28, 107, NULL, 1, '2026-06-09', '2026-06-09', '2026-06-10', 'Activa', 'Mostrador'),
 (28, 29, 116, NULL, 1, '2026-06-09', '2026-06-09', '2026-06-10', 'Activa', 'Mostrador'),
 (29, 30, 142, NULL, 1, '2026-06-09', '2026-06-09', '2026-06-12', 'Activa', 'Mostrador'),
-(30, 31, 148, NULL, 1, '2026-06-09', '2026-06-09', '2026-06-11', 'Reservada', 'Mostrador');
+(30, 31, 148, NULL, 1, '2026-06-09', '2026-06-09', '2026-06-11', 'Reservada', 'Mostrador'),
+(31, 32, 150, 5, 1, '2026-06-15', '2026-06-15', '2026-06-18', 'Finalizada', 'Mostrador');
 
 -- --------------------------------------------------------
 
@@ -503,7 +503,6 @@ INSERT INTO `reserva` (`id_reserva`, `cliente_id`, `habitacion_id`, `empleado_id
 -- Estructura de tabla para la tabla `servicio`
 --
 
-DROP TABLE IF EXISTS `servicio`;
 CREATE TABLE `servicio` (
   `id_servicio` int NOT NULL,
   `reserva_id` int DEFAULT NULL,
@@ -528,7 +527,6 @@ INSERT INTO `servicio` (`id_servicio`, `reserva_id`, `descripcion`, `costo`, `fa
 -- Estructura de tabla para la tabla `sucursal`
 --
 
-DROP TABLE IF EXISTS `sucursal`;
 CREATE TABLE `sucursal` (
   `id_sucursal` int NOT NULL,
   `nombre` varchar(100) DEFAULT NULL,
@@ -689,19 +687,19 @@ ALTER TABLE `admin`
 -- AUTO_INCREMENT de la tabla `cliente`
 --
 ALTER TABLE `cliente`
-  MODIFY `id_cliente` int NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=32;
+  MODIFY `id_cliente` int NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=33;
 
 --
 -- AUTO_INCREMENT de la tabla `convenio`
 --
 ALTER TABLE `convenio`
-  MODIFY `id_convenio` int NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=7;
+  MODIFY `id_convenio` int NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=8;
 
 --
 -- AUTO_INCREMENT de la tabla `detalles_huesped`
 --
 ALTER TABLE `detalles_huesped`
-  MODIFY `id_detalle` int NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=25;
+  MODIFY `id_detalle` int NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=26;
 
 --
 -- AUTO_INCREMENT de la tabla `empleado`
@@ -719,7 +717,7 @@ ALTER TABLE `empresa`
 -- AUTO_INCREMENT de la tabla `factura`
 --
 ALTER TABLE `factura`
-  MODIFY `id_factura` int NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=12;
+  MODIFY `id_factura` int NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=15;
 
 --
 -- AUTO_INCREMENT de la tabla `factura_detalle`
@@ -743,7 +741,7 @@ ALTER TABLE `huesped_empresarial`
 -- AUTO_INCREMENT de la tabla `pago`
 --
 ALTER TABLE `pago`
-  MODIFY `id_pago` int NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=22;
+  MODIFY `id_pago` int NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=23;
 
 --
 -- AUTO_INCREMENT de la tabla `reporte`
@@ -755,7 +753,7 @@ ALTER TABLE `reporte`
 -- AUTO_INCREMENT de la tabla `reserva`
 --
 ALTER TABLE `reserva`
-  MODIFY `id_reserva` int NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=31;
+  MODIFY `id_reserva` int NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=32;
 
 --
 -- AUTO_INCREMENT de la tabla `servicio`
@@ -778,120 +776,8 @@ ALTER TABLE `sucursal`
 --
 ALTER TABLE `convenio`
   ADD CONSTRAINT `convenio_ibfk_1` FOREIGN KEY (`empresa_id`) REFERENCES `empresa` (`id_empresa`);
-
---
--- Filtros para la tabla `detalles_huesped`
---
-ALTER TABLE `detalles_huesped`
-  ADD CONSTRAINT `detalles_huesped_ibfk_1` FOREIGN KEY (`reserva_id`) REFERENCES `reserva` (`id_reserva`);
-
---
--- Filtros para la tabla `empleado`
---
-ALTER TABLE `empleado`
-  ADD CONSTRAINT `empleado_ibfk_1` FOREIGN KEY (`sucursal_id`) REFERENCES `sucursal` (`id_sucursal`);
-
---
--- Filtros para la tabla `factura`
---
-ALTER TABLE `factura`
-  ADD CONSTRAINT `factura_ibfk_1` FOREIGN KEY (`reserva_id`) REFERENCES `reserva` (`id_reserva`),
-  ADD CONSTRAINT `factura_ibfk_2` FOREIGN KEY (`empresa_id`) REFERENCES `empresa` (`id_empresa`),
-  ADD CONSTRAINT `factura_ibfk_3` FOREIGN KEY (`generado_por_empleado`) REFERENCES `empleado` (`id_empleado`);
-
---
--- Filtros para la tabla `factura_detalle`
---
-ALTER TABLE `factura_detalle`
-  ADD CONSTRAINT `factura_detalle_ibfk_1` FOREIGN KEY (`factura_id`) REFERENCES `factura` (`id_factura`),
-  ADD CONSTRAINT `factura_detalle_ibfk_2` FOREIGN KEY (`servicio_id`) REFERENCES `servicio` (`id_servicio`);
-
---
--- Filtros para la tabla `habitacion`
---
-ALTER TABLE `habitacion`
-  ADD CONSTRAINT `habitacion_ibfk_1` FOREIGN KEY (`sucursal_id`) REFERENCES `sucursal` (`id_sucursal`);
-
---
--- Filtros para la tabla `huesped_empresarial`
---
-ALTER TABLE `huesped_empresarial`
-  ADD CONSTRAINT `huesped_empresarial_ibfk_1` FOREIGN KEY (`empresa_id`) REFERENCES `empresa` (`id_empresa`);
-
---
--- Filtros para la tabla `pago`
---
-ALTER TABLE `pago`
-  ADD CONSTRAINT `pago_ibfk_1` FOREIGN KEY (`reserva_id`) REFERENCES `reserva` (`id_reserva`);
-
---
--- Filtros para la tabla `reporte`
---
-ALTER TABLE `reporte`
-  ADD CONSTRAINT `reporte_ibfk_1` FOREIGN KEY (`generado_por_empleado`) REFERENCES `empleado` (`id_empleado`);
-
---
--- Filtros para la tabla `reserva`
---
-ALTER TABLE `reserva`
-  ADD CONSTRAINT `reserva_ibfk_1` FOREIGN KEY (`cliente_id`) REFERENCES `cliente` (`id_cliente`),
-  ADD CONSTRAINT `reserva_ibfk_2` FOREIGN KEY (`habitacion_id`) REFERENCES `habitacion` (`id_habitacion`),
-  ADD CONSTRAINT `reserva_ibfk_3` FOREIGN KEY (`empleado_id`) REFERENCES `empleado` (`id_empleado`),
-  ADD CONSTRAINT `reserva_ibfk_4` FOREIGN KEY (`sucursal_id`) REFERENCES `sucursal` (`id_sucursal`);
-
---
--- Filtros para la tabla `servicio`
---
-ALTER TABLE `servicio`
-  ADD CONSTRAINT `servicio_ibfk_1` FOREIGN KEY (`reserva_id`) REFERENCES `reserva` (`id_reserva`);
-
+COMMIT;
 
 /*!40101 SET CHARACTER_SET_CLIENT=@OLD_CHARACTER_SET_CLIENT */;
 /*!40101 SET CHARACTER_SET_RESULTS=@OLD_CHARACTER_SET_RESULTS */;
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
-/* facturas simulacion */
-
-INSERT INTO `cliente` (`id_cliente`, `nombre`, `apellido`, `telefono`, `email`, `tipo_cliente`, `fecha_registro`) VALUES
-(32, 'Enrique Peña Nieto', '', '555 0000 555', 'Morena@bienestar.com', 'Ejecutivo', '2026-06-15 12:00:00');
-
-INSERT INTO `reserva` (`id_reserva`, `cliente_id`, `habitacion_id`, `empleado_id`, `sucursal_id`, `fecha_reserva`, `checkin`, `checkout`, `estado`, `metodo_reserva`) VALUES
-(31, 32, 150, 5, 1, '2026-06-15', '2026-06-15', '2026-06-18', 'Finalizada', 'Mostrador');
-
-INSERT INTO `detalles_huesped` (`id_detalle`, `reserva_id`, `fecha_nacimiento`, `personas`, `telefono`, `email`, `cargo`, `rfc`) VALUES
-(25, 31, '1966-07-20', 2, '555 0000 555', 'Morena@bienestar.com', 'Gobernador', 'PEEN660720HJC');
-
-INSERT INTO `pago` (`id_pago`, `reserva_id`, `monto`, `metodo_pago`, `estado_pago`, `fecha_pago`) VALUES
-(22, 31, 10920.00, 'Tarjeta (Bancaria - 0236)', 'Completado', '2026-06-18 11:30:00');
-
-
-INSERT INTO `factura` (`id_factura`, `reserva_id`, `empresa_id`, `total`, `estado`, `tipo_envio`, `fecha_emision`, `generado_por_empleado`) VALUES
-(12, 31, NULL, 12495.00, 'Pagada', 'DIGITAL', '2026-06-18 11:35:00', 5);
-
-
-
-INSERT INTO `factura` (`id_factura`, `reserva_id`, `empresa_id`, `total`, `estado`, `tipo_envio`, `fecha_emision`, `generado_por_empleado`) VALUES
-(13, 22, 9, 2400.00, 'Pendiente', 'DIGITAL', '2026-06-09 02:25:00', 1);
-
-
-
-INSERT INTO `factura` (`id_factura`, `reserva_id`, `empresa_id`, `total`, `estado`, `tipo_envio`, `fecha_emision`, `generado_por_empleado`) VALUES
-(14, 24, NULL, 10500.00, 'Pagada', 'DIGITAL', '2026-06-09 02:40:00', 1);
-
-
-
--- 4) AUTO_INCREMENT actualizado para que el sistema siga generando IDs correctamente
-
-ALTER TABLE `cliente` MODIFY `id_cliente` int NOT NULL AUTO_INCREMENT, AUTO_INCREMENT = 33;
-ALTER TABLE `reserva` MODIFY `id_reserva` int NOT NULL AUTO_INCREMENT, AUTO_INCREMENT = 32;
-ALTER TABLE `detalles_huesped` MODIFY `id_detalle` int NOT NULL AUTO_INCREMENT, AUTO_INCREMENT = 26;
-ALTER TABLE `pago` MODIFY `id_pago` int NOT NULL AUTO_INCREMENT, AUTO_INCREMENT = 23;
-ALTER TABLE `factura` MODIFY `id_factura` int NOT NULL AUTO_INCREMENT, AUTO_INCREMENT = 15;
-
-INSERT INTO `convenio` (`id_convenio`, `empresa_id`, `terminos`, `descuento`, `fecha_inicio`, `fecha_fin`, `activo`) VALUES
-(7, 1, 'Convenio de prueba para alerta de vencimiento próximo', 12.00, '2025-07-12', '2026-07-12', 1);
-
-ALTER TABLE `convenio` MODIFY `id_convenio` int NOT NULL AUTO_INCREMENT, AUTO_INCREMENT = 8;
-
-
-
-COMMIT;
