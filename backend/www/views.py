@@ -2643,3 +2643,35 @@ def api_ocupacion_actual():
     except Exception as e:
         print(f"Error en api_ocupacion_actual: {str(e)}")
         return jsonify({'error': 'Error al calcular la ocupación actual'}), 500
+    
+
+#alertas para administrador, convenios próximos a vencer
+@views.route('/api/convenios_por_vencer', methods=['GET'])
+def api_convenios_por_vencer():
+    """Convenios activos cuya fecha_fin cae dentro de los próximos 30 días."""
+    try:
+        hoy = date.today()
+        limite = hoy + timedelta(days=30)
+
+        convenios = Convenio.query.join(Empresa).filter(
+            Convenio.activo == True,
+            Convenio.fecha_fin <= limite,
+            Convenio.fecha_fin >= hoy
+        ).order_by(Convenio.fecha_fin.asc()).all()
+
+        resultado = []
+        for conv in convenios:
+            dias_restantes = (conv.fecha_fin - hoy).days
+            resultado.append({
+                'id': conv.id_convenio,
+                'empresa': conv.empresa.nombre,
+                'fecha_fin': conv.fecha_fin.strftime('%Y-%m-%d'),
+                'dias_restantes': dias_restantes,
+                'descuento': float(conv.descuento or 0)
+            })
+
+        return jsonify(resultado), 200
+
+    except Exception as e:
+        print(f"Error en api_convenios_por_vencer: {str(e)}")
+        return jsonify({'error': 'Error al obtener convenios próximos a vencer'}), 500

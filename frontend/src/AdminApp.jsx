@@ -87,6 +87,7 @@ export default function AdminApp({ onLogout }) {
   const [reservasMensuales, setReservasMensuales] = useState(MOCK_RESERVAS_MES);
   const [ingresosMensuales, setIngresosMensuales] = useState(MOCK_INGRESOS_MES);
   const [ocupacionHabitaciones, setOcupacionHabitaciones] = useState(MOCK_OCUPACION_HABITACIONES);
+  const [conveniosPorVencer, setConveniosPorVencer] = useState([]);
   const [filtroPeriodo, setFiltroPeriodo] = useState('Todos');
   const [lastSyncTime, setLastSyncTime] = useState(localStorage.getItem('admin_last_sync') || null);
 
@@ -118,11 +119,12 @@ export default function AdminApp({ onLogout }) {
         'Authorization': `Bearer ${token}` 
       };
 
-      const [overviewRes, reservasRes, ingresosRes, ocupacionRes] = await Promise.all([
+      const [overviewRes, reservasRes, ingresosRes, ocupacionRes, conveniosVencerRes] = await Promise.all([
         fetch(`${BACKEND_URL}/overview_admin`, { headers }),
         fetch(`${BACKEND_URL}/reservaciones_por_mes`, { headers }),
         fetch(`${BACKEND_URL}/ingresos_por_mes`, { headers }),
-        fetch(`${BACKEND_URL}/ocupacion_habitaciones`, { headers })
+        fetch(`${BACKEND_URL}/ocupacion_habitaciones`, { headers }),
+        fetch(`${BACKEND_URL}/api/convenios_por_vencer`)
       ]);
 
       // Si el servidor responde con un error de autenticación o similar
@@ -134,6 +136,7 @@ export default function AdminApp({ onLogout }) {
       const reservasRaw = await reservasRes.json();
       const ingresosRaw = await ingresosRes.json();
       const ocupacionRaw = await ocupacionRes.json();
+      const conveniosVencerRaw = conveniosVencerRes.ok ? await conveniosVencerRes.json() : [];
 
       const preciosBase = {
         'Individual': 900,
@@ -173,6 +176,7 @@ export default function AdminApp({ onLogout }) {
       localStorage.setItem('local_reservas', JSON.stringify(reservas));
       localStorage.setItem('local_ingresos', JSON.stringify(ingresos));
       localStorage.setItem('local_ocupacion', JSON.stringify(ocupacion));
+      localStorage.setItem('local_convenios_vencer', JSON.stringify(conveniosVencerRaw));
       localStorage.setItem('admin_last_sync', stringSincronizacion);
 
       // Asignar al estado de la aplicación
@@ -180,6 +184,7 @@ export default function AdminApp({ onLogout }) {
       setReservasMensuales(reservas);
       setIngresosMensuales(ingresos);
       setOcupacionHabitaciones(ocupacion);
+      setConveniosPorVencer(conveniosVencerRaw);
       setLastSyncTime(stringSincronizacion);
       
       setIsDemoMode(false);
@@ -196,6 +201,7 @@ export default function AdminApp({ onLogout }) {
       const localReservas = localStorage.getItem('local_reservas');
       const localIngresos = localStorage.getItem('local_ingresos');
       const localOcupacion = localStorage.getItem('local_ocupacion');
+      const localConveniosVencer = localStorage.getItem('local_convenios_vencer');
       const savedSyncTime = localStorage.getItem('admin_last_sync');
 
       if (localOverview && localReservas && localIngresos && localOcupacion) {
@@ -203,6 +209,7 @@ export default function AdminApp({ onLogout }) {
         setReservasMensuales(JSON.parse(localReservas));
         setIngresosMensuales(JSON.parse(localIngresos));
         setOcupacionHabitaciones(JSON.parse(localOcupacion));
+        setConveniosPorVencer(localConveniosVencer ? JSON.parse(localConveniosVencer) : []);
         setLastSyncTime(savedSyncTime);
         addToast("Sin conexión. Mostrando último respaldo local.", "warning");
       } else {
@@ -211,6 +218,7 @@ export default function AdminApp({ onLogout }) {
         setReservasMensuales(MOCK_RESERVAS_MES);
         setIngresosMensuales(MOCK_INGRESOS_MES);
         setOcupacionHabitaciones(MOCK_OCUPACION_HABITACIONES);
+        setConveniosPorVencer([]);
         setLastSyncTime(null);
         addToast("Sin conexión y sin respaldos. Usando datos simulados.", "error");
       }
@@ -325,6 +333,11 @@ export default function AdminApp({ onLogout }) {
               <div className="flex items-center gap-3">
                 <DollarSign className="w-5 h-5 shrink-0" />
                 <span className="text-sm">Reporte Financiero</span>
+                {conveniosPorVencer.length > 0 && (
+                  <span className="ml-1 bg-amber-500 text-white text-[10px] font-bold rounded-full w-5 h-5 flex items-center justify-center shrink-0">
+                    {conveniosPorVencer.length}
+                  </span>
+                )}
               </div>
               <ChevronRight className={`w-4 h-4 transition-transform duration-200 ${activeTab === 'financiero' ? 'rotate-90 text-white' : 'text-slate-600 group-hover:text-slate-400'}`} />
             </button>
@@ -990,6 +1003,74 @@ export default function AdminApp({ onLogout }) {
                     </div>
                   </div>
 
+                </div>
+
+                {/* ============================================================
+                    WIDGET: ALERTAS DE CONVENIOS PRÓXIMOS A VENCER
+                    ============================================================ */}
+                <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs">
+                  <div className="flex items-center justify-between mb-4">
+                    <div>
+                      <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                        <AlertCircle className="w-5 h-5 text-amber-500" />
+                        Convenios Próximos a Vencer
+                      </h3>
+                      <p className="text-xs text-slate-400 mt-0.5">
+                        Convenios corporativos activos con vencimiento en los próximos 30 días
+                      </p>
+                    </div>
+                    {conveniosPorVencer.length > 0 && (
+                      <span className="bg-amber-100 text-amber-700 text-xs font-bold px-3 py-1.5 rounded-full border border-amber-200">
+                        {conveniosPorVencer.length} {conveniosPorVencer.length === 1 ? 'alerta' : 'alertas'}
+                      </span>
+                    )}
+                  </div>
+
+                  {conveniosPorVencer.length === 0 ? (
+                    <div className="flex items-center gap-3 bg-emerald-50 border border-emerald-100 rounded-xl p-4">
+                      <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+                      <p className="text-sm text-emerald-800 font-medium">
+                        No hay convenios próximos a vencer en los próximos 30 días.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="space-y-2.5">
+                      {conveniosPorVencer.map((conv) => {
+                        const esUrgente = conv.dias_restantes <= 7;
+                        return (
+                          <div
+                            key={conv.id}
+                            className={`flex items-center justify-between p-4 rounded-xl border transition-colors ${
+                              esUrgente
+                                ? 'bg-rose-50 border-rose-200'
+                                : 'bg-amber-50 border-amber-200'
+                            }`}
+                          >
+                            <div className="flex items-center gap-3">
+                              <span className={`text-lg ${esUrgente ? 'text-rose-500' : 'text-amber-500'}`}>
+                                ⚠
+                              </span>
+                              <div>
+                                <p className={`text-sm font-bold ${esUrgente ? 'text-rose-900' : 'text-amber-900'}`}>
+                                  Convenio {conv.empresa}
+                                </p>
+                                <p className={`text-xs mt-0.5 ${esUrgente ? 'text-rose-600' : 'text-amber-600'}`}>
+                                  Vence en {conv.dias_restantes} {conv.dias_restantes === 1 ? 'día' : 'días'} &bull; {conv.fecha_fin} &bull; Descuento {conv.descuento}%
+                                </p>
+                              </div>
+                            </div>
+                            <span className={`text-xs font-bold px-3 py-1 rounded-full shrink-0 ${
+                              esUrgente
+                                ? 'bg-rose-600 text-white'
+                                : 'bg-amber-500 text-white'
+                            }`}>
+                              {conv.dias_restantes}d
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
 
                 {/* Gráfico de Ingresos Mensuales */}
